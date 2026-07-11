@@ -1,0 +1,8 @@
+aiogram==3.29.1
+yt-dlp
+aiohttp
+python-dotenv
+gallery-dl
+spotdl
+requests
+beautifulsoup4
