@@ -46,7 +46,7 @@
 ### 🍪 Налаштування cookies.txt (Для 18+ контенту та приватних профілів)
 
 Для того, щоб бот міг завантажувати контент з Instagram, Facebook та відео з віковими обмеженнями на YouTube, необхідний файл `cookies.txt`.
-1. Встановіть у своєму браузері розширення (наприклад, [Get cookies.txt LOCALLY](https://chrome.google.com/webstore/detail/get-cookiestxt-locally/ccpabgiknmdcilmangailenhjehcaipe)).
+1. Встановіть у своєму браузері розширення (наприклад, [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)).
 2. Авторизуйтесь в Instagram, YouTube та Facebook у вашому браузері.
 3. Експортуйте cookies у форматі **Netscape** і збережіть файл як `cookies.txt` у кореневій папці бота.
 4. Перезапустіть бота:
@@ -75,9 +75,3 @@
    ```bash
    python main.py
    ```
-
-## 📝 Ліцензія
-Цей проєкт розповсюджується під ліцензією MIT (або вашою обраною).
-
----
-*Приємного користування!*
