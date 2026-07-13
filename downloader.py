@@ -7,8 +7,9 @@ import time
 from pathlib import Path
 from typing import Union, List
 import yt_dlp
+from core.config import TIER_LIMITS
 
-async def download_with_spotdl(url: str, session_dir: Path, progress_callback=None) -> List[Path]:
+async def download_with_spotdl(url: str, session_dir: Path, progress_callback=None, tier: str = 'free') -> List[Path]:
     """
     Завантажує треки, альбоми та плейлисти зі Spotify за допомогою spotdl.
     """
@@ -18,21 +19,46 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
         await progress_callback(10)
         
     def run_spotdl():
-        # Зберігаємо у форматі "Назва - Артист.ext"
-        cmd = [
-            sys.executable, "-m", "spotdl",
-            url,
-            "--output", str(session_dir) + "/{title} - {artist}.{output-ext}",
-            "--audio", "youtube-music", "youtube",
-            "--dont-filter-results",
-            "--log-level", "ERROR"
-        ]
         env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", NO_COLOR="1", TERM="dumb")
+        
+        # Використовуємо spotdl save для отримання списку треків, щоб застосувати ліміт 30
+        save_file = session_dir / "tracks.spotdl"
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', env=env)
+            subprocess.run([
+                sys.executable, "-m", "spotdl", "save", url, "--save-file", str(save_file)
+            ], check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
+            
+            playlist_limit = TIER_LIMITS[tier]['playlist']
+            if save_file.exists() and playlist_limit < 9999:
+                with open(save_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                # spotdl save може зберігати у json або текстовому форматі.
+                # Якщо це просто список url, рахуємо рядки. Якщо JSON - спробуємо розпарсити.
+                # Для надійності, якщо це JSON list:
+                import json
+                try:
+                    data = json.loads(content)
+                    if isinstance(data, list) and len(data) > playlist_limit:
+                        with open(save_file, "w", encoding="utf-8") as f:
+                            json.dump(data[:playlist_limit], f)
+                except json.JSONDecodeError:
+                    # Це звичайний текстовий список
+                    lines = content.splitlines()
+                    if len(lines) > playlist_limit:
+                        with open(save_file, "w", encoding="utf-8") as f:
+                            f.write('\n'.join(lines[:playlist_limit]))
+
+            cmd = [
+                sys.executable, "-m", "spotdl",
+                str(save_file),
+                "--output", str(session_dir) + "/{title} - {artist}.{output-ext}",
+                "--audio", "youtube-music", "youtube",
+                "--log-level", "ERROR"
+            ]
+            subprocess.run(cmd, check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
         except subprocess.CalledProcessError as e:
             err_msg = e.stderr if e.stderr else "Невідома помилка"
-            # Обрізаємо довгий текст помилки для Telegram
             if len(err_msg) > 1000:
                 err_msg = err_msg[:1000] + "..."
             raise Exception(f"Помилка spotdl: {err_msg}")
@@ -44,11 +70,11 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
         
     downloaded_files = []
     for file_path in session_dir.iterdir():
-        if file_path.is_file():
+        if file_path.is_file() and file_path.suffix.lower() != '.spotdl':
             downloaded_files.append(file_path)
             
     if not downloaded_files:
-        raise Exception("Не вдалося завантажити медіа зі Spotify. Перевірте посилання.")
+        raise Exception("Не вдалося завантажити медіа зі Spotify. Можливо, трек не знайдено.")
         
     # Сортуємо за часом створення, щоб зберегти порядок
     downloaded_files.sort(key=lambda x: x.stat().st_mtime)
@@ -100,7 +126,7 @@ async def _download_file(response, filename: str, progress_callback) -> Path:
                 
     return filepath
 
-def download_media_sync(url: str, format_spec: str, progress_callback, loop, session_dir: Path) -> Path:
+def download_media_sync(url: str, format_spec: str, progress_callback, loop, session_dir: Path, tier: str) -> Path:
     """
     Синхронна функція для роботи з yt-dlp. Буде запущена в окремому потоці.
     """
@@ -121,7 +147,6 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
     opts = {
         'format': format_spec,
         'outtmpl': str(session_dir / '%(title)s_%(id)s.%(ext)s'),
-        'noplaylist': True,
         'ignoreerrors': True,
         'quiet': True,
         'no_warnings': True,
@@ -129,6 +154,24 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         'progress_hooks': [hook] if progress_callback else [],
         'js_runtimes': {'node': {}},
     }
+    
+    size_limit_hit = False
+    
+    playlist_limit = TIER_LIMITS[tier]['playlist']
+    size_limit = TIER_LIMITS[tier]['size']
+    
+    if playlist_limit < 9999:
+        opts['playlistend'] = playlist_limit
+        
+    def check_size(info, *, incomplete):
+        nonlocal size_limit_hit
+        size = info.get('filesize') or info.get('filesize_approx') or 0
+        if size > size_limit:
+            size_limit_hit = True
+            return 'SIZE_LIMIT_EXCEEDED'
+        return None
+        
+    opts['match_filter'] = check_size
     
     import os
     ffmpeg_winget = Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'ffmpeg-8.1.2-full_build' / 'bin' / 'ffmpeg.exe'
@@ -146,14 +189,19 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         })
-        
-    opts['postprocessors'].extend([
-        {'key': 'FFmpegMetadata'},
-        {'key': 'EmbedThumbnail', 'already_have_thumbnail': False}
-    ])
-    
-    # Додаємо faststart для правильного відображення відео в Telegram
-    opts['postprocessor_args'] = {'FFmpegVideoConvertor': ['-movflags', '+faststart']}
+        opts['postprocessors'].append({
+            'key': 'FFmpegThumbnailsConvertor',
+            'format': 'jpg',
+        })
+        # Вшиваємо метадані, але EmbedThumbnail зробимо власноруч через mutagen для кропу
+        opts['postprocessors'].append({'key': 'FFmpegMetadata'})
+    else:
+        # Додаємо faststart для правильного відображення відео в Telegram
+        opts['postprocessor_args'] = {'FFmpegVideoConvertor': ['-movflags', '+faststart']}
+        opts['postprocessors'].extend([
+            {'key': 'FFmpegMetadata'},
+            {'key': 'EmbedThumbnail', 'already_have_thumbnail': False}
+        ])
 
     # Формуємо список конфігів для перебору cookies
     browsers = ['brave', 'firefox', 'chrome', 'edge', 'opera', 'safari']
@@ -176,6 +224,48 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
             with yt_dlp.YoutubeDL(current_opts) as ydl:
                 ydl.extract_info(url, download=True)
                 
+                if size_limit_hit:
+                    raise Exception('SIZE_LIMIT_EXCEEDED')
+                
+                # Для аудіо обрізаємо та вшиваємо обкладинку 1:1
+                if 'bestaudio' in format_spec and 'bestvideo' not in format_spec:
+                    from PIL import Image
+                    from mutagen.id3 import ID3, APIC, error
+                    
+                    for file_path in session_dir.iterdir():
+                        if file_path.suffix.lower() == '.mp3':
+                            jpg_path = file_path.with_suffix('.jpg')
+                            if jpg_path.exists():
+                                try:
+                                    img = Image.open(jpg_path)
+                                    width, height = img.size
+                                    min_dim = min(width, height)
+                                    left = (width - min_dim) / 2
+                                    top = (height - min_dim) / 2
+                                    right = (width + min_dim) / 2
+                                    bottom = (height + min_dim) / 2
+                                    img = img.crop((left, top, right, bottom))
+                                    img.save(jpg_path)
+                                    
+                                    try:
+                                        tags = ID3(str(file_path))
+                                    except error:
+                                        tags = ID3()
+                                        
+                                    with open(jpg_path, 'rb') as f:
+                                        img_data = f.read()
+                                        
+                                    tags.add(APIC(
+                                        encoding=3,
+                                        mime='image/jpeg',
+                                        type=3, 
+                                        desc=u'Cover',
+                                        data=img_data
+                                    ))
+                                    tags.save(str(file_path), v2_version=3)
+                                except Exception as e:
+                                    print("Помилка вшивання обкладинки:", e)
+
                 # Після завантаження просто беремо всі файли з директорії
                 downloaded_files = []
                 for file_path in session_dir.iterdir():
@@ -200,6 +290,8 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
                 return downloaded_files
                 
         except Exception as e:
+            if str(e) == 'SIZE_LIMIT_EXCEEDED':
+                raise e
             last_error = e
             print(f"Помилка yt-dlp з конфігом {config}: {e}")
             
@@ -210,7 +302,7 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
             raise Exception("Цей контент має вікові обмеження (18+). YouTube блокує його завантаження для ботів. Додайте файл cookies.txt для автентифікації.")
         raise last_error
 
-async def download_with_gallery_dl(url: str, session_dir: Path, progress_callback=None) -> List[Path]:
+async def download_with_gallery_dl(url: str, session_dir: Path, progress_callback=None, tier: str = 'free') -> List[Path]:
     import sys
     
     if progress_callback:
@@ -223,11 +315,15 @@ async def download_with_gallery_dl(url: str, session_dir: Path, progress_callbac
             url
         ]
         
+        playlist_limit = TIER_LIMITS[tier]['playlist']
+        if playlist_limit < 9999:
+            cmd.extend(["--range", f"1-{playlist_limit}"])
+        
         if Path('cookies.txt').exists():
             cmd.extend(["--cookies", "cookies.txt"])
             
         try:
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
             print("gallery-dl output:", result.stdout)
         except subprocess.CalledProcessError as e:
             print("gallery-dl error:", e.stderr)
@@ -343,7 +439,7 @@ async def download_threads_native(url: str, session_dir: Path, progress_callback
     downloaded.sort()
     return downloaded
 
-async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None) -> Union[Path, List[Path]]:
+async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None, tier: str = 'free') -> Union[Path, List[Path]]:
     """
     Головна асинхронна функція для завантаження медіа.
     """
@@ -353,7 +449,7 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
     
     # Перенаправляємо Instagram на gallery-dl
     if 'instagram.com' in url:
-        return await download_with_gallery_dl(url, session_dir, progress_callback)
+        return await download_with_gallery_dl(url, session_dir, progress_callback, tier)
         
     # Перенаправляємо Threads на кастомний парсер
     if 'threads.net' in url or 'threads.com' in url:
@@ -361,12 +457,15 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
         
     # Перенаправляємо фотографії Facebook на gallery-dl (yt-dlp краще працює з відео)
     if 'facebook.com/photo' in url or 'facebook.com/media' in url:
-        return await download_with_gallery_dl(url, session_dir, progress_callback)
+        return await download_with_gallery_dl(url, session_dir, progress_callback, tier)
 
     if 'spotify.com' in url:
-        return await download_with_spotdl(url, session_dir, progress_callback)
+        return await download_with_spotdl(url, session_dir, progress_callback, tier)
         
     if 'github.com' in url:
+        if tier == 'free':
+            # We can't easily check github zip size before download, so we just allow it or reject big ones later.
+            pass
         return await download_github(url, progress_callback)
 
     try:
@@ -378,7 +477,8 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
             format_spec,
             progress_callback,
             loop,
-            session_dir
+            session_dir,
+            tier
         )
         return filepath
     except Exception as e:

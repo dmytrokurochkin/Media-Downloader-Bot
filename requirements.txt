@@ -6,3 +6,5 @@ gallery-dl
 spotdl
 requests
 beautifulsoup4
+aiosqlite
+Babel

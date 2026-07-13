@@ -1,0 +1,284 @@
+import aiosqlite
+import datetime
+import json
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+
+DB_PATH = Path("database.db")
+
+async def init_db():
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        await db.execute('PRAGMA journal_mode=WAL;')
+        await db.execute('PRAGMA synchronous=NORMAL;')
+        # Таблиця користувачів
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                telegram_id INTEGER PRIMARY KEY,
+                username TEXT,
+                full_name TEXT,
+                is_vip BOOLEAN DEFAULT 0,
+                vip_until DATETIME DEFAULT NULL,
+                language_code TEXT DEFAULT 'en',
+                guest_yt_quality TEXT DEFAULT 'best'
+            )
+        ''')
+        
+        # Міграція: перевіряємо чи існує колонка vip_until, якщо ні - додаємо
+        async with db.execute('PRAGMA table_info(users)') as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+            if 'vip_until' not in columns:
+                await db.execute('ALTER TABLE users ADD COLUMN vip_until DATETIME DEFAULT NULL')
+            if 'guest_yt_quality' not in columns:
+                await db.execute("ALTER TABLE users ADD COLUMN guest_yt_quality TEXT DEFAULT 'best'")
+            if 'tier' not in columns:
+                await db.execute("ALTER TABLE users ADD COLUMN tier TEXT DEFAULT 'free'")
+                await db.execute("UPDATE users SET tier = 'max' WHERE is_vip = 1")
+            if 'banned_bot_until' not in columns:
+                await db.execute('ALTER TABLE users ADD COLUMN banned_bot_until DATETIME DEFAULT NULL')
+            if 'banned_support_until' not in columns:
+                await db.execute('ALTER TABLE users ADD COLUMN banned_support_until DATETIME DEFAULT NULL')
+        
+        # Таблиця історії завантажень (аналітика)
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS downloads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER,
+                url TEXT,
+                domain TEXT,
+                page_title TEXT,
+                file_size INTEGER,
+                success BOOLEAN,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (telegram_id) REFERENCES users (telegram_id)
+            )
+        ''')
+        
+        # Таблиця для щоденних квот (можна оптимізувати через group by по downloads,
+        # але для швидкості зробимо окрему статистику або будемо рахувати 'success=1' з downloads за поточну добу).
+        # Оскільки нам треба просто кількість за добу, можна рахувати це динамічно:
+        # SELECT COUNT(*) FROM downloads WHERE telegram_id = ? AND success = 1 AND DATE(timestamp) = DATE('now')
+        
+        await db.commit()
+
+async def get_or_create_user(telegram_id: int, username: str, full_name: str, language_code: str = 'en') -> dict:
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+            user = await cursor.fetchone()
+            
+        if not user:
+            await db.execute('''
+                INSERT INTO users (telegram_id, username, full_name, language_code, tier)
+                VALUES (?, ?, ?, ?, 'free')
+            ''', (telegram_id, username, full_name, language_code))
+            await db.commit()
+            return {
+                "telegram_id": telegram_id,
+                "username": username,
+                "full_name": full_name,
+                "is_vip": False,
+                "vip_until": None,
+                "language_code": language_code,
+                "guest_yt_quality": "best",
+                "tier": "free",
+                "banned_bot_until": None,
+                "banned_support_until": None
+            }
+        
+        # Оновлюємо ім'я та юзернейм, якщо вони змінились
+        if user['username'] != username or user['full_name'] != full_name:
+            await db.execute('''
+                UPDATE users SET username = ?, full_name = ? WHERE telegram_id = ?
+            ''', (username, full_name, telegram_id))
+            await db.commit()
+            
+        user_dict = dict(user)
+        
+        # Перевірка на закінчення VIP
+        if user_dict.get('vip_until'):
+            try:
+                # Намагаємось розпарсити isoformat, підтримуємо також пробіл замість T якщо є (на всяк випадок)
+                vip_until_str = user_dict['vip_until'].replace(' ', 'T')
+                vip_until_dt = datetime.datetime.fromisoformat(vip_until_str)
+                # Якщо dt не aware, робимо його aware
+                if vip_until_dt.tzinfo is None:
+                    vip_until_dt = vip_until_dt.replace(tzinfo=datetime.timezone.utc)
+                    
+                now_dt = datetime.datetime.now(datetime.timezone.utc)
+                
+                # Якщо час вийшов
+                if now_dt > vip_until_dt:
+                    await db.execute("UPDATE users SET is_vip = 0, vip_until = NULL, tier = 'free' WHERE telegram_id = ?", (telegram_id,))
+                    await db.commit()
+                    user_dict['is_vip'] = 0
+                    user_dict['vip_until'] = None
+                    user_dict['tier'] = 'free'
+                else:
+                    user_dict['is_vip'] = 1
+            except Exception as e:
+                print(f"Помилка парсингу vip_until для {telegram_id}: {e}")
+            
+        return user_dict
+
+async def set_user_language(telegram_id: int, language_code: str):
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        await db.execute('UPDATE users SET language_code = ? WHERE telegram_id = ?', (language_code, telegram_id))
+        await db.commit()
+
+async def set_user_vip(telegram_id: int, is_vip: bool):
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        await db.execute('UPDATE users SET is_vip = ? WHERE telegram_id = ?', (is_vip, telegram_id))
+        await db.commit()
+
+async def grant_vip(telegram_id: int, days: int, tier: str = 'max') -> str:
+    """Видає VIP доступ на задану кількість днів. Повертає нову дату закінчення."""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Перевіряємо, чи юзер вже має VIP. Якщо так - додаємо дні до існуючого залишку
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT vip_until, tier FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+            user = await cursor.fetchone()
+            
+        if not user:
+            raise ValueError("User not found")
+            
+        vip_until = now
+        if user['vip_until']:
+            try:
+                current_vip_until = datetime.datetime.fromisoformat(user['vip_until'].replace(' ', 'T'))
+                if current_vip_until.tzinfo is None:
+                    current_vip_until = current_vip_until.replace(tzinfo=datetime.timezone.utc)
+                if current_vip_until > now:
+                    if user['tier'] == tier:
+                        vip_until = current_vip_until
+            except Exception:
+                pass
+                
+        new_vip_until = vip_until + datetime.timedelta(days=days)
+        new_vip_until_iso = new_vip_until.isoformat()
+        
+        await db.execute('UPDATE users SET is_vip = 1, vip_until = ?, tier = ? WHERE telegram_id = ?', (new_vip_until_iso, tier, telegram_id))
+        await db.commit()
+        return new_vip_until_iso
+
+async def revoke_vip(telegram_id: int):
+    """Забирає VIP доступ"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        async with db.execute('SELECT telegram_id FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+            if not await cursor.fetchone():
+                raise ValueError("User not found")
+                
+        await db.execute("UPDATE users SET is_vip = 0, vip_until = NULL, tier = 'free' WHERE telegram_id = ?", (telegram_id,))
+        await db.commit()
+
+async def get_daily_download_count(telegram_id: int) -> int:
+    """Отримує кількість успішних завантажень за поточну добу"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        # DATE('now') використовує UTC. Якщо потрібен локальний час, можна DATE('now', 'localtime')
+        async with db.execute('''
+            SELECT COUNT(*) FROM downloads 
+            WHERE telegram_id = ? AND success = 1 AND DATE(timestamp) = DATE('now')
+        ''', (telegram_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+async def add_download_record(telegram_id: int, url: str, domain: str, page_title: str, file_size: int, success: bool):
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        await db.execute('''
+            INSERT INTO downloads (telegram_id, url, domain, page_title, file_size, success)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (telegram_id, url, domain, page_title, file_size, success))
+        await db.commit()
+
+async def get_all_users() -> List[int]:
+    """Повертає список всіх telegram_id для розсилки"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        async with db.execute('SELECT telegram_id FROM users') as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
+async def get_users_stats_by_tier() -> dict:
+    """Повертає загальну кількість та розбивку по рівнях"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT tier, COUNT(*) as count FROM users GROUP BY tier') as cursor:
+            rows = await cursor.fetchall()
+            
+        stats = {'total': 0, 'free': 0, 'pro': 0, 'max': 0}
+        for r in rows:
+            t = r['tier']
+            c = r['count']
+            if t in stats:
+                stats[t] = c
+            stats['total'] += c
+            
+        return stats
+
+async def get_top_domains() -> List[dict]:
+    """Повертає лідерборд найпопулярніших ресурсів"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('''
+            SELECT domain, COUNT(*) as count 
+            FROM downloads 
+            WHERE success = 1 
+            GROUP BY domain 
+            ORDER BY count DESC 
+            LIMIT 10
+        ''') as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+async def get_top_users(limit: int = 10) -> List[dict]:
+    """Повертає лідерборд користувачів за кількістю завантажень"""
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('''
+            SELECT u.full_name, u.username, COUNT(d.id) as count
+            FROM users u
+            JOIN downloads d ON u.telegram_id = d.telegram_id
+            WHERE d.success = 1
+            GROUP BY u.telegram_id
+            ORDER BY count DESC
+            LIMIT ?
+        ''', (limit,)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+async def set_guest_yt_quality(telegram_id: int, quality: str):
+    import aiosqlite
+    async with aiosqlite.connect('database.db', timeout=20.0) as db:
+        await db.execute('UPDATE users SET guest_yt_quality = ? WHERE telegram_id = ?', (quality, telegram_id))
+        await db.commit()
+
+async def ban_user_bot(telegram_id: int, days: Optional[int] = None) -> str:
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        if days is None:
+            # Назавжди
+            ban_until = "9999-12-31T23:59:59"
+        else:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            ban_until = (now + datetime.timedelta(days=days)).isoformat()
+            
+        await db.execute('UPDATE users SET banned_bot_until = ? WHERE telegram_id = ?', (ban_until, telegram_id))
+        await db.commit()
+        return ban_until
+
+async def ban_user_support(telegram_id: int, days: Optional[int] = None) -> str:
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        if days is None:
+            # Назавжди
+            ban_until = "9999-12-31T23:59:59"
+        else:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            ban_until = (now + datetime.timedelta(days=days)).isoformat()
+            
+        await db.execute('UPDATE users SET banned_support_until = ? WHERE telegram_id = ?', (ban_until, telegram_id))
+        await db.commit()
+        return ban_until
+
+async def unban_user(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH, timeout=20.0) as db:
+        await db.execute('UPDATE users SET banned_bot_until = NULL, banned_support_until = NULL WHERE telegram_id = ?', (telegram_id,))
+        await db.commit()

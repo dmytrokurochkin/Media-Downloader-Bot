@@ -1,0 +1,303 @@
+import asyncio
+from aiogram import Router, F, Bot
+from aiogram.types import Message
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from datetime import datetime
+
+from core.config import ADMIN_IDS
+from core.loader import bot
+from database import get_or_create_user, get_all_users, grant_vip, revoke_vip, get_users_stats_by_tier, ban_user_bot, ban_user_support, unban_user
+from locales import get_text
+from keyboards.reply import get_admin_keyboard, get_admin_cancel_keyboard, get_main_keyboard
+
+admin_router = Router()
+
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
+
+def text_matches(key: str):
+    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
+
+class AdminState(StatesGroup):
+    waiting_for_broadcast_message = State()
+    waiting_for_broadcast_button = State()
+    waiting_for_give_vip = State()
+    waiting_for_remove_vip = State()
+    waiting_for_reply = State()
+    waiting_for_ban_bot = State()
+    waiting_for_ban_support = State()
+    waiting_for_unban = State()
+
+@admin_router.message(Command("admin"))
+async def admin_command(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id):
+        return
+        
+    await state.clear()
+    stats = await get_users_stats_by_tier()
+    text = get_text(user['language_code'], 'admin_stats', total=stats['total'], free=stats['free'], pro=stats['pro'], max=stats['max'])
+    
+    await message.reply(text, reply_markup=get_admin_keyboard(user['language_code']))
+
+@admin_router.message(text_matches('admin_btn_exit'))
+async def exit_admin_panel(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    await message.reply(get_text(user['language_code'], 'admin_exit_msg'), reply_markup=get_main_keyboard(user['language_code']))
+
+@admin_router.message(text_matches('admin_btn_cancel'))
+async def cancel_admin_action(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    await message.reply(get_text(user['language_code'], 'admin_cancel_msg'), reply_markup=get_admin_keyboard(user['language_code']))
+
+# --- Broadcast ---
+@admin_router.message(text_matches('admin_btn_broadcast'))
+async def btn_broadcast(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(
+        get_text(user['language_code'], 'admin_broadcast_prompt'), 
+        reply_markup=get_admin_cancel_keyboard(user['language_code']),
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminState.waiting_for_broadcast_message)
+
+@admin_router.message(AdminState.waiting_for_broadcast_message)
+async def process_broadcast_message(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    await state.update_data(broadcast_message_id=message.message_id)
+    from aiogram.utils.keyboard import ReplyKeyboardBuilder
+    builder = ReplyKeyboardBuilder()
+    builder.button(text=get_text(user['language_code'], 'admin_btn_no_button'))
+    builder.button(text=get_text(user['language_code'], 'admin_btn_cancel'))
+    builder.adjust(1)
+    await message.reply(
+        get_text(user['language_code'], 'admin_broadcast_button_prompt'),
+        reply_markup=builder.as_markup(resize_keyboard=True),
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminState.waiting_for_broadcast_button)
+
+@admin_router.message(AdminState.waiting_for_broadcast_button)
+async def process_broadcast_button(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    data = await state.get_data()
+    msg_id = data.get("broadcast_message_id")
+    reply_markup = None
+    no_btn_text = get_text(user['language_code'], 'admin_btn_no_button')
+    if message.text and message.text != no_btn_text:
+        if " - " in message.text:
+            text, url = message.text.split(" - ", 1)
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=text.strip(), url=url.strip())]
+            ])
+        else:
+            await message.reply(get_text(user['language_code'], 'admin_broadcast_bad_button'))
+            return
+            
+    users = await get_all_users()
+    count = 0
+    await message.reply(get_text(user['language_code'], 'admin_broadcast_start', count=len(users)), reply_markup=get_admin_keyboard(user['language_code']))
+    await state.clear()
+    
+    for uid in users:
+        try:
+            await bot.copy_message(
+                chat_id=uid,
+                from_chat_id=message.chat.id,
+                message_id=msg_id,
+                reply_markup=reply_markup
+            )
+            count += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass
+            
+    await message.reply(get_text(user['language_code'], 'admin_broadcast_done', count=count))
+
+# --- Reply ---
+@admin_router.message(text_matches('admin_btn_reply'))
+async def btn_reply(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_reply_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_reply)
+
+@admin_router.message(AdminState.waiting_for_reply)
+async def process_reply(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.reply(get_text(user['language_code'], 'admin_err_format_reply'))
+        return
+        
+    try:
+        import html
+        target_id = int(args[0])
+        text = html.escape(args[1])
+        
+        target_user = await get_or_create_user(target_id, "", "")
+        reply_msg = get_text(target_user['language_code'], 'reply_from_admin', text=text)
+        
+        await bot.send_message(target_id, reply_msg)
+        await message.reply(get_text(user['language_code'], 'admin_reply_success', target_id=target_id), reply_markup=get_admin_keyboard(user['language_code']))
+        await state.clear()
+    except ValueError:
+        await message.reply(get_text(user['language_code'], 'admin_err_id'))
+    except Exception as e:
+        await message.reply(f"Помилка надсилання: {e}")
+
+# --- Give VIP ---
+@admin_router.message(text_matches('admin_btn_give_vip'))
+async def btn_give_vip(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_give_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_give_vip)
+
+@admin_router.message(AdminState.waiting_for_give_vip)
+async def process_give_vip(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    args = message.text.split()
+    if len(args) < 2:
+        await message.reply(get_text(user['language_code'], 'admin_err_format_vip'))
+        return
+        
+    try:
+        target_id = int(args[0])
+        days = int(args[1])
+        tier = args[2].lower() if len(args) > 2 else 'max'
+        if tier not in ['free', 'pro', 'max']:
+            tier = 'max'
+            
+        new_date = await grant_vip(target_id, days, tier=tier)
+        try:
+            dt = datetime.fromisoformat(new_date.replace(' ', 'T'))
+            formatted_date = dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            formatted_date = new_date
+            
+        await message.reply(get_text(user['language_code'], 'vip_granted_admin', user_id=target_id, days=days, new_date=formatted_date, tier=tier), reply_markup=get_admin_keyboard(user['language_code']))
+        
+        target_user = await get_or_create_user(target_id, "", "")
+        try:
+            await bot.send_message(target_id, get_text(target_user['language_code'], 'vip_granted_user', vip_until=formatted_date, tier=tier))
+        except Exception:
+            pass
+            
+        await state.clear()
+    except ValueError as e:
+        if str(e) == "User not found":
+            await message.reply(get_text(user['language_code'], 'admin_err_not_found'))
+        else:
+            await message.reply(get_text(user['language_code'], 'admin_err_id_days_num'))
+
+# --- Remove VIP ---
+@admin_router.message(text_matches('admin_btn_revoke_vip'))
+async def btn_remove_vip(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_revoke_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_remove_vip)
+
+@admin_router.message(AdminState.waiting_for_remove_vip)
+async def process_remove_vip(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    try:
+        target_id = int(message.text.strip())
+        await revoke_vip(target_id)
+        await message.reply(get_text(user['language_code'], 'vip_revoked_admin', user_id=target_id), reply_markup=get_admin_keyboard(user['language_code']))
+        await state.clear()
+    except ValueError as e:
+        if str(e) == "User not found":
+            await message.reply(get_text(user['language_code'], 'admin_err_not_found'))
+        else:
+            await message.reply(get_text(user['language_code'], 'admin_err_id'))
+
+# --- Ban Bot ---
+@admin_router.message(text_matches('admin_btn_ban_bot'))
+async def btn_ban_bot(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_ban_bot_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_ban_bot)
+
+@admin_router.message(AdminState.waiting_for_ban_bot)
+async def process_ban_bot(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    args = message.text.split()
+    try:
+        target_id = int(args[0])
+        days = int(args[1]) if len(args) > 1 else None
+        
+        ban_until_iso = await ban_user_bot(target_id, days)
+        try:
+            dt = datetime.fromisoformat(ban_until_iso.replace(' ', 'T'))
+            formatted_date = dt.strftime("%Y-%m-%d %H:%M")
+            if dt.year == 9999:
+                formatted_date = "Назавжди"
+        except Exception:
+            formatted_date = ban_until_iso
+            
+        await message.reply(get_text(user['language_code'], 'admin_user_banned_bot', user_id=target_id, until=formatted_date), reply_markup=get_admin_keyboard(user['language_code']))
+        await state.clear()
+    except ValueError:
+        await message.reply(get_text(user['language_code'], 'admin_err_id_days'))
+
+# --- Ban Support ---
+@admin_router.message(text_matches('admin_btn_ban_support'))
+async def btn_ban_support(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_ban_support_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_ban_support)
+
+@admin_router.message(AdminState.waiting_for_ban_support)
+async def process_ban_support(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    args = message.text.split()
+    try:
+        target_id = int(args[0])
+        days = int(args[1]) if len(args) > 1 else None
+        
+        ban_until_iso = await ban_user_support(target_id, days)
+        try:
+            dt = datetime.fromisoformat(ban_until_iso.replace(' ', 'T'))
+            formatted_date = dt.strftime("%Y-%m-%d %H:%M")
+            if dt.year == 9999:
+                formatted_date = "Назавжди"
+        except Exception:
+            formatted_date = ban_until_iso
+            
+        await message.reply(get_text(user['language_code'], 'admin_user_banned_support', user_id=target_id, until=formatted_date), reply_markup=get_admin_keyboard(user['language_code']))
+        await state.clear()
+    except ValueError:
+        await message.reply(get_text(user['language_code'], 'admin_err_id_days'))
+
+# --- Unban ---
+@admin_router.message(text_matches('admin_btn_unban'))
+async def btn_unban(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    await message.reply(get_text(user['language_code'], 'admin_unban_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    await state.set_state(AdminState.waiting_for_unban)
+
+@admin_router.message(AdminState.waiting_for_unban)
+async def process_unban(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    try:
+        target_id = int(message.text.strip())
+        await unban_user(target_id)
+        await message.reply(get_text(user['language_code'], 'admin_user_unbanned', user_id=target_id), reply_markup=get_admin_keyboard(user['language_code']))
+        await state.clear()
+    except ValueError:
+        await message.reply(get_text(user['language_code'], 'admin_err_id'))
