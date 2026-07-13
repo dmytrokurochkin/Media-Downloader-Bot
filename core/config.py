@@ -9,6 +9,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 LOCAL_API_SERVER_URL = os.getenv("LOCAL_API_SERVER_URL", "http://127.0.0.1:8081")
 ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
+ERROR_LOG_CHANNEL_ID = os.getenv("ERROR_LOG_CHANNEL_ID", "")
+if ERROR_LOG_CHANNEL_ID:
+    try:
+        ERROR_LOG_CHANNEL_ID = int(ERROR_LOG_CHANNEL_ID)
+    except ValueError:
+        ERROR_LOG_CHANNEL_ID = None
 
 # Database path
 DB_PATH = Path("database.db")

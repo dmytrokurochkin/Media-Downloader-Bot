@@ -490,6 +490,29 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         except Exception:
             pass
+            
+        from core.config import ERROR_LOG_CHANNEL_ID
+        if ERROR_LOG_CHANNEL_ID:
+            try:
+                import traceback
+                import io
+                from aiogram.types import BufferedInputFile
+                from datetime import datetime
+                
+                tb = traceback.format_exc()
+                report_content = f"# Critical Download Error\n\n"
+                report_content += f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                report_content += f"**User ID:** `{user['telegram_id']}`\n"
+                report_content += f"**Username:** @{user.get('username', 'None')}\n"
+                report_content += f"**Name:** {user.get('full_name', 'None')}\n"
+                report_content += f"**URL:** `{url}`\n\n"
+                report_content += f"## Traceback\n```python\n{tb}\n```"
+                
+                doc = BufferedInputFile(report_content.encode('utf-8'), filename=f"error_{user['telegram_id']}.md")
+                caption = f"🚨 <b>Критична помилка завантаження!</b>\n\n👤 Користувач: <a href='tg://user?id={user['telegram_id']}'>{user.get('full_name', 'Unknown')}</a>\n🔗 Посилання: <code>{url}</code>"
+                await bot.send_document(chat_id=ERROR_LOG_CHANNEL_ID, document=doc, caption=caption, parse_mode="HTML")
+            except Exception as log_e:
+                print(f"Failed to send error log: {log_e}")
     finally:
         user_cooldowns.discard(user['telegram_id'])
 

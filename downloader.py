@@ -146,7 +146,8 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
 
     opts = {
         'format': format_spec,
-        'outtmpl': str(session_dir / '%(title)s_%(id)s.%(ext)s'),
+        'outtmpl': str(session_dir / '%(title).100s_%(id).40s.%(ext)s'),
+        'windowsfilenames': True,
         'ignoreerrors': True,
         'quiet': True,
         'no_warnings': True,
