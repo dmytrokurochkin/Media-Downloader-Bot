@@ -97,6 +97,38 @@ const locales = {
         'subscription_expires': 'Истекает:',
         'subscription_days_left': 'Дней осталось:',
         'btn_extend_vip': 'Продлить или улучшить (Stars)'
+    },
+    'pl': {
+        'title_profile': 'Mój Profil',
+        'title_leaderboard': 'Rankingi',
+        'title_store': 'Sklep VIP',
+        'tier_free': 'Darmowy',
+        'tier_pro': 'Poziom Pro',
+        'tier_max': 'Poziom Max',
+        'tier_vip': 'Dostęp VIP',
+        'tier_admin': 'Administrator',
+        'stat_downloads': 'Pobrań dzisiaj:',
+        'stat_unlimited': 'Bez limitu',
+        'buy_vip_btn': 'Kup VIP (Stars)',
+        'top_users': 'Top Użytkowników',
+        'top_sites': 'Popularne Strony',
+        'downloads_count': 'pobrań',
+        'vip_benefits': 'Korzyści VIP',
+        'pro_desc_1': '🚀 100 pobrań dziennie',
+        'pro_desc_2': '📁 Obsługa plików do 500 MB',
+        'vip_desc_1': '🚀 Nielimitowane pobierania',
+        'vip_desc_2': '📁 Obsługa plików do 2 GB',
+        'vip_desc_3': '⚡ Maksymalna prędkość',
+        'vip_desc_4': '🎶 Wysoka jakość dźwięku',
+        'buy_success_msg': 'Otwieranie płatności w Telegram...',
+        'payment_redirect_alert': 'Dla bezpiecznej płatności przez Telegram Stars, zostaniesz przekierowany do czatu z botem. Kontynuować?',
+        'limit_size': 'Maks. rozmiar:',
+        'limit_playlist': 'Playlisty:',
+        'stat_daily_limit': 'Dzienny limit:',
+        'subscription_active': 'Twoja subskrypcja:',
+        'subscription_expires': 'Wygasa:',
+        'subscription_days_left': 'Pozostało dni:',
+        'btn_extend_vip': 'Przedłuż lub ulepsz (Stars)'
     }
 };
 
