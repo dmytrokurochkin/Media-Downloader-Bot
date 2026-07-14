@@ -94,9 +94,7 @@ body {
     background: radial-gradient(
         250px circle at var(--mouse-x, -9999px) var(--mouse-y, -9999px),
         rgba(255, 255, 255, 0.8) 0%, 
-        rgba(255, 120, 200, 0.6) 20%, 
-        rgba(100, 200, 255, 0.6) 40%, 
-        rgba(200, 150, 255, 0.3) 60%,
+        rgba(255, 255, 255, 0.3) 30%, 
         transparent 80%
     );
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
