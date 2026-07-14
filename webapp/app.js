@@ -49,15 +49,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tell Telegram app is ready
     tg.ready();
     
-    // Mouse hover spotlight effect
-    document.body.addEventListener('mousemove', e => {
+    // Interactive spotlight and prism effect
+    const updateCursorPos = (e) => {
+        let clientX = e.clientX;
+        let clientY = e.clientY;
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        }
+        
         document.querySelectorAll('.glass').forEach(card => {
             const rect = card.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
             card.style.setProperty('--mouse-x', `${x}px`);
             card.style.setProperty('--mouse-y', `${y}px`);
         });
+    };
+
+    document.body.addEventListener('mousemove', updateCursorPos);
+    document.body.addEventListener('touchmove', updateCursorPos);
+    
+    // Add touch class for mobile so the effect is visible while touching
+    document.querySelectorAll('.glass').forEach(card => {
+        card.addEventListener('touchstart', (e) => {
+            updateCursorPos(e);
+            card.classList.add('touching');
+        });
+        card.addEventListener('touchend', () => card.classList.remove('touching'));
+        card.addEventListener('touchcancel', () => card.classList.remove('touching'));
     });
 });
 
