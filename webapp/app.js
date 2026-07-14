@@ -62,8 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const rect = card.getBoundingClientRect();
             const x = clientX - rect.left;
             const y = clientY - rect.top;
+            
+            const rotX = -((y / rect.height) - 0.5) * 10;
+            const rotY = ((x / rect.width) - 0.5) * 10;
+            
             card.style.setProperty('--mouse-x', `${x}px`);
             card.style.setProperty('--mouse-y', `${y}px`);
+            card.style.setProperty('--rot-x', `${rotX}deg`);
+            card.style.setProperty('--rot-y', `${rotY}deg`);
         });
     };
 
