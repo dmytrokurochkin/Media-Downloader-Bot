@@ -34,7 +34,7 @@ body.tg-theme-dark {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 body {
@@ -188,7 +188,8 @@ body {
 
 .user-name {
     font-size: 1.5rem;
-    font-weight: 700;
+    font-weight: 800;
+    letter-spacing: -0.03em;
     margin-bottom: 0.5rem;
 }
 
@@ -212,7 +213,7 @@ body {
 }
 
 .stat-value {
-    font-weight: 700;
+    font-weight: 800;
     color: var(--primary-color);
 }
 
