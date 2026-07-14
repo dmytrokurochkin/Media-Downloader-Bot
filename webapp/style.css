@@ -36,6 +36,8 @@ body.tg-theme-dark {
     box-sizing: border-box;
     font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 body {
