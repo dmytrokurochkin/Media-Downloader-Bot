@@ -53,6 +53,7 @@ body {
     max-width: 600px;
     margin: 0 auto;
     padding: 1rem;
+    padding-top: calc(1rem + var(--tg-safe-area-inset-top, 30px));
 }
 
 .glass {
