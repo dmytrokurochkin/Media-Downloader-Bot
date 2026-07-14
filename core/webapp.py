@@ -8,7 +8,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     This allows the static GitHub Pages Mini App to display dynamic data without a backend API.
     """
     # Replace this with the actual GitHub Pages URL later
-    base_url = "https://your-username.github.io/Media-Downloader-Bot/webapp/index.html"
+    base_url = "https://dmytrokurochkin.github.io/Media-Downloader-Bot/webapp/index.html"
     
     tier = user.get('tier', 'free')
     limit = TIER_LIMITS.get(tier, {}).get('playlist', 30)
