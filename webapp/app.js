@@ -1,5 +1,4 @@
 const tg = window.Telegram.WebApp;
-tg.expand(); // Expand to full screen
 
 // Extract URL parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -28,14 +27,18 @@ if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
 
 // Set up UI
 document.addEventListener('DOMContentLoaded', () => {
-    if (tg.expand) {
-        tg.expand(); // Expand to full height
-    }
-    if (tg.requestFullscreen) {
-        try {
-            tg.requestFullscreen(); // Force modern Fullscreen mode if supported
-        } catch (e) {
-            console.error("Fullscreen not supported or failed", e);
+    const isMobile = ['android', 'android_ar', 'android_x', 'ios', 'ipad'].includes(tg.platform);
+    
+    if (isMobile) {
+        if (tg.expand) {
+            tg.expand(); // Expand to full height
+        }
+        if (tg.requestFullscreen) {
+            try {
+                tg.requestFullscreen(); // Force modern Fullscreen mode if supported
+            } catch (e) {
+                console.error("Fullscreen not supported or failed", e);
+            }
         }
     }
     applyTranslations();
