@@ -93,6 +93,7 @@ LOCALES = {
         "admin_err_id_days": "Помилка формату: ID (та дні) мають бути числами.",
         "admin_ban_support_prompt": "Введіть ID користувача та кількість днів (опціонально).\nЯкщо без днів - бан назавжди.\nПриклад: `123456789 7` або `123456789`",
         "admin_unban_prompt": "Введіть ID користувача для зняття всіх банів:\nПриклад: `123456789`",
+        "too_fast": "⚠️ Занадто швидко!",
     },
     "en": {
         "start": "👋 <b>Hello! I'm your fast personal media downloader!</b>\n\nI can download photos, videos, and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, Instagram, Threads, Facebook, and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and additional information!",
@@ -188,6 +189,7 @@ LOCALES = {
         "admin_err_id_days": "Format error: ID (and days) must be numbers.",
         "admin_ban_support_prompt": "Enter user ID and number of days (optional).\nIf without days - permanent ban.\nExample: `123456789 7` or `123456789`",
         "admin_unban_prompt": "Enter user ID to remove all bans:\nExample: `123456789`",
+        "too_fast": "⚠️ Too fast!",
     },
     "pl": {
         "start": "👋 <b>Cześć! Jestem twoim szybkim osobistym narzędziem do pobierania!</b>\n\nMogę pobierać zdjęcia, filmy i pliki audio z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej!",
@@ -283,6 +285,7 @@ LOCALES = {
         "admin_err_id_days": "Błąd formatu: ID (i dni) muszą być liczbami.",
         "admin_ban_support_prompt": "Wprowadź ID użytkownika i liczbę dni (opcjonalnie).\nJeśli bez dni - permanentny ban.\nPrzykład: `123456789 7` lub `123456789`",
         "admin_unban_prompt": "Wprowadź ID użytkownika, aby usunąć wszystkie bany:\nPrzykład: `123456789`",
+        "too_fast": "⚠️ Zbyt szybko!",
     }
 }
 

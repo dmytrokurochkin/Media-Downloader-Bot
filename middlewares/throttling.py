@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from typing import Callable, Dict, Any, Awaitable
 from cachetools import TTLCache
 import time
+from locales import get_text
 
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, rate_limit: float = 1.0):
@@ -17,14 +18,16 @@ class ThrottlingMiddleware(BaseMiddleware):
     ) -> Any:
         
         user_id = None
+        lang = 'uk'
         if isinstance(event, (Message, CallbackQuery)):
             user_id = event.from_user.id
+            lang = event.from_user.language_code or 'en'
             
         if user_id:
             if user_id in self.cache:
                 # Spam detected, ignore the event
                 if isinstance(event, CallbackQuery):
-                    await event.answer("⚠️ Занадто швидко!", show_alert=False)
+                    await event.answer(get_text(lang, 'too_fast'), show_alert=False)
                 return
             else:
                 self.cache[user_id] = time.time()
