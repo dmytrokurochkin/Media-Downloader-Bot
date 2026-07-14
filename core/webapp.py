@@ -11,7 +11,9 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     base_url = "https://dmytrokurochkin.github.io/Media-Downloader-Bot/webapp/index.html"
     
     tier = user.get('tier', 'free')
-    limit = TIER_LIMITS.get(tier, {}).get('playlist', 30)
+    limit_daily = TIER_LIMITS.get(tier, {}).get('daily', 25)
+    limit_playlist = TIER_LIMITS.get(tier, {}).get('playlist', 10)
+    limit_size = TIER_LIMITS.get(tier, {}).get('size', 50*1024*1024)
     lang = user.get('language_code', 'uk')
     user_name = user.get('full_name', 'User')
     
@@ -21,14 +23,40 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     tu_str = ",".join([f"{u.get('full_name', 'User').replace(',', '').replace(':', '')}:{u['count']}" for u in top_users_data])
     
     top_sites_data = await get_top_domains()
-    ts_str = ",".join([f"{s['domain'].replace(',', '').replace(':', '')}:{s['count']}" for s in top_sites_data])
+    domain_mapping = {
+        'YouTube Music': ['music.youtube.com'],
+        'YouTube': ['youtube.com', 'youtu.be', 'www.youtube.com', 'm.youtube.com', 'youtube'],
+        'Instagram': ['instagram.com', 'www.instagram.com', 'm.instagram.com'],
+        'TikTok': ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com', 'm.tiktok.com'],
+        'Spotify': ['spotify.com', 'open.spotify.com'],
+        'SoundCloud': ['soundcloud.com', 'on.soundcloud.com', 'm.soundcloud.com'],
+        'Threads': ['threads.net', 'www.threads.net', 'threads.com'],
+        'Facebook': ['facebook.com', 'www.facebook.com', 'fb.watch', 'm.facebook.com'],
+        'GitHub': ['github.com', 'www.github.com']
+    }
+    merged_counts = {}
+    for d in top_sites_data:
+        raw_domain = d['domain'].lower()
+        mapped = False
+        for nice_name, variants in domain_mapping.items():
+            if raw_domain in variants or any(v in raw_domain for v in variants):
+                merged_counts[nice_name] = merged_counts.get(nice_name, 0) + d['count']
+                mapped = True
+                break
+        if not mapped:
+            merged_counts[raw_domain] = merged_counts.get(raw_domain, 0) + d['count']
+            
+    sorted_domains = sorted(merged_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    ts_str = ",".join([f"{domain.replace(',', '').replace(':', '')}:{count}" for domain, count in sorted_domains])
     
     # Build query parameters
     params = {
         'l': lang,
         't': tier,
         'u': used_downloads,
-        'lm': limit,
+        'lmd': limit_daily,
+        'lmp': limit_playlist,
+        'lms': limit_size,
         'tu': tu_str,
         'ts': ts_str,
         'b': bot_username,

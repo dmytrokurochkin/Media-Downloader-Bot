@@ -6,7 +6,9 @@ const urlParams = new URLSearchParams(window.location.search);
 const lang = urlParams.get('l') || 'uk';
 const tier = urlParams.get('t') || 'free';
 const used = parseInt(urlParams.get('u') || '0');
-const limit = parseInt(urlParams.get('lm') || '0');
+const limitDaily = parseInt(urlParams.get('lmd') || '0');
+const limitPlaylist = parseInt(urlParams.get('lmp') || '0');
+const limitSize = parseInt(urlParams.get('lms') || '0');
 const topUsersStr = urlParams.get('tu') || '';
 const topSitesStr = urlParams.get('ts') || '';
 const botUsername = urlParams.get('b') || '';
@@ -14,8 +16,14 @@ const userNameParam = urlParams.get('nm') || '';
 
 // Get user data from Telegram SDK if available, fallback to URL param
 let userFirstName = userNameParam || 'User';
+let userPhotoUrl = null;
 if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-    userFirstName = tg.initDataUnsafe.user.first_name;
+    if (tg.initDataUnsafe.user.first_name) {
+        userFirstName = tg.initDataUnsafe.user.first_name;
+    }
+    if (tg.initDataUnsafe.user.photo_url) {
+        userPhotoUrl = tg.initDataUnsafe.user.photo_url;
+    }
 }
 
 // Set up UI
@@ -30,7 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function applyTranslations() {
     document.getElementById('pageTitle').innerText = getText(lang, 'title_profile');
-    document.getElementById('label_stat_downloads').innerText = getText(lang, 'stat_downloads');
+    document.getElementById('label_stat_downloads').innerText = getText(lang, 'stat_daily_limit');
+    document.getElementById('label_limit_size').innerText = getText(lang, 'limit_size');
+    document.getElementById('label_limit_playlist').innerText = getText(lang, 'limit_playlist');
     document.getElementById('label_top_users').innerText = getText(lang, 'top_users');
     document.getElementById('label_top_sites').innerText = getText(lang, 'top_sites');
     document.getElementById('label_tier_vip_store').innerText = getText(lang, 'tier_vip');
@@ -48,12 +58,20 @@ function applyTranslations() {
 
 function renderProfile() {
     document.getElementById('userName').innerText = userFirstName;
-    document.getElementById('userInitial').innerText = userFirstName.charAt(0).toUpperCase();
+    
+    if (userPhotoUrl) {
+        document.getElementById('userInitial').style.display = 'none';
+        const img = document.getElementById('userAvatar');
+        img.src = userPhotoUrl;
+        img.style.display = 'block';
+    } else {
+        document.getElementById('userInitial').innerText = userFirstName.charAt(0).toUpperCase();
+    }
     
     const badge = document.getElementById('userTierBadge');
     badge.innerText = getText(lang, 'tier_' + tier) || tier;
     
-    if (tier === 'vip' || tier === 'admin') {
+    if (tier === 'vip' || tier === 'max' || tier === 'pro' || tier === 'admin') {
         badge.style.background = 'rgba(139, 92, 246, 0.2)';
         badge.style.color = '#8b5cf6';
         badge.style.borderColor = 'rgba(139, 92, 246, 0.3)';
@@ -61,17 +79,38 @@ function renderProfile() {
 
     document.getElementById('userUsed').innerText = used;
     const limitEl = document.getElementById('userLimit');
-    if (limit >= 9999) {
+    if (limitDaily >= 9999) {
         limitEl.innerText = getText(lang, 'stat_unlimited');
         document.getElementById('usageProgressBar').style.width = '100%';
     } else {
-        limitEl.innerText = limit;
-        const pct = Math.min((used / limit) * 100, 100);
+        limitEl.innerText = limitDaily;
+        const pct = Math.min((used / limitDaily) * 100, 100);
         
         // Slight delay for animation
         setTimeout(() => {
             document.getElementById('usageProgressBar').style.width = pct + '%';
         }, 100);
+    }
+    
+    // Formatting size
+    const sizeEl = document.getElementById('userSizeLimit');
+    if (limitSize >= 9999999999) {
+        sizeEl.innerText = getText(lang, 'stat_unlimited');
+    } else {
+        const mb = Math.round(limitSize / (1024 * 1024));
+        if (mb >= 1024) {
+            sizeEl.innerText = (mb / 1024).toFixed(1) + ' GB';
+        } else {
+            sizeEl.innerText = mb + ' MB';
+        }
+    }
+    
+    // Playlist limit
+    const playlistEl = document.getElementById('userPlaylistLimit');
+    if (limitPlaylist >= 9999) {
+        playlistEl.innerText = getText(lang, 'stat_unlimited');
+    } else {
+        playlistEl.innerText = limitPlaylist;
     }
 }
 
@@ -128,14 +167,18 @@ function switchTab(tabId, btnElement) {
 function buyVip() {
     tg.HapticFeedback.impactOccurred('medium');
     
-    // Show loading
-    const btn = document.getElementById('buyVipBtn');
-    btn.innerText = '...';
-    
-    if (botUsername) {
-        // Deep link to bot with /start buy_vip command
-        tg.openTelegramLink(`https://t.me/${botUsername}?start=buy_vip`);
-    } else {
-        tg.showAlert("Bot username not configured!");
-    }
+    tg.showConfirm(getText(lang, 'payment_redirect_alert'), function(confirmed) {
+        if (confirmed) {
+            const btn = document.getElementById('buyVipBtn');
+            btn.innerText = '...';
+            
+            if (botUsername) {
+                // Deep link to bot with /start buy_vip command
+                tg.openTelegramLink(`https://t.me/${botUsername}?start=buy_vip`);
+                setTimeout(() => tg.close(), 500);
+            } else {
+                tg.showAlert("Bot username not configured!");
+            }
+        }
+    });
 }

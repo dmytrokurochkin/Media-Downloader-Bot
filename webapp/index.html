@@ -22,8 +22,9 @@
             <!-- Profile Section -->
             <section id="section-profile" class="section active">
                 <div class="card glass center-text fade-in">
-                    <div class="avatar-placeholder">
+                    <div class="avatar-placeholder" id="avatarContainer">
                         <span id="userInitial">U</span>
+                        <img id="userAvatar" style="display: none; width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" alt="Avatar">
                     </div>
                     <h2 id="userName" class="user-name">User</h2>
                     <div class="badge" id="userTierBadge">Free</div>
@@ -34,8 +35,16 @@
                         <span id="label_stat_downloads">Downloads today:</span>
                         <span class="stat-value"><span id="userUsed">0</span> / <span id="userLimit">0</span></span>
                     </div>
-                    <div class="progress-bar-container">
+                    <div class="progress-bar-container" style="margin-bottom: 1rem;">
                         <div class="progress-bar" id="usageProgressBar"></div>
+                    </div>
+                    <div class="stat-row">
+                        <span id="label_limit_size">Max Size:</span>
+                        <span class="stat-value" id="userSizeLimit">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span id="label_limit_playlist">Playlists:</span>
+                        <span class="stat-value" id="userPlaylistLimit">-</span>
                     </div>
                 </div>
             </section>

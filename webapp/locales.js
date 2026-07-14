@@ -17,7 +17,12 @@ const locales = {
         'vip_desc_2': '📁 Підтримка файлів до 2 ГБ',
         'vip_desc_3': '⚡ Максимальна швидкість',
         'vip_desc_4': '🎶 Висока якість аудіо',
-        'buy_success_msg': 'Відкриття оплати в Telegram...'
+        'buy_success_msg': 'Відкриття оплати в Telegram...',
+        'payment_redirect_alert': 'Для безпечної оплати через Telegram Stars, вас буде перенаправлено в чат з ботом. Бажаєте продовжити?',
+        'limit_size': 'Макс. розмір:',
+        'limit_playlist': 'Плейлисти:',
+        'stat_unlimited': 'Безліміт',
+        'stat_daily_limit': 'Денний ліміт:'
     },
     'en': {
         'title_profile': 'My Profile',
@@ -37,7 +42,12 @@ const locales = {
         'vip_desc_2': '📁 File support up to 2 GB',
         'vip_desc_3': '⚡ Maximum speed',
         'vip_desc_4': '🎶 High quality audio',
-        'buy_success_msg': 'Opening payment in Telegram...'
+        'buy_success_msg': 'Opening payment in Telegram...',
+        'payment_redirect_alert': 'For secure payment via Telegram Stars, you will be redirected to the bot chat. Continue?',
+        'limit_size': 'Max Size:',
+        'limit_playlist': 'Playlists:',
+        'stat_unlimited': 'Unlimited',
+        'stat_daily_limit': 'Daily Limit:'
     },
     'ru': {
         'title_profile': 'Мой Профиль',
@@ -57,7 +67,12 @@ const locales = {
         'vip_desc_2': '📁 Поддержка файлов до 2 ГБ',
         'vip_desc_3': '⚡ Максимальная скорость',
         'vip_desc_4': '🎶 Высокое качество аудио',
-        'buy_success_msg': 'Открытие оплаты в Telegram...'
+        'buy_success_msg': 'Открытие оплаты в Telegram...',
+        'payment_redirect_alert': 'Для безопасной оплаты через Telegram Stars, вы будете перенаправлены в чат с ботом. Продолжить?',
+        'limit_size': 'Макс. размер:',
+        'limit_playlist': 'Плейлисты:',
+        'stat_unlimited': 'Безлимит',
+        'stat_daily_limit': 'Дневной лимит:'
     }
 };
 
