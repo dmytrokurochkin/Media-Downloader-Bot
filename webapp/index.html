@@ -6,7 +6,7 @@
     <title>Media Downloader Bot</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
     <div class="app-container">
@@ -69,6 +69,21 @@
                 <div class="card glass vip-card fade-in">
                     <div class="vip-icon">💎</div>
                     <h2 id="label_tier_vip_store">VIP Access</h2>
+                    
+                    <div id="activeSubInfo" style="display: none; margin-top: 1rem; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 16px; text-align: left;">
+                        <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0.25rem;" id="label_sub_active">Your subscription:</div>
+                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--primary-color); margin-bottom: 0.5rem;" id="activeSubTierName">-</div>
+                        
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                            <span id="label_sub_expires">Expires:</span>
+                            <span id="activeSubDate" style="font-weight: 600;">-</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 0.25rem;">
+                            <span id="label_sub_days">Days left:</span>
+                            <span id="activeSubDays" style="font-weight: 600;">-</span>
+                        </div>
+                    </div>
+
                     <ul class="vip-features">
                         <li id="label_vip_desc_1">🚀 Unlimited downloads</li>
                         <li id="label_vip_desc_2">📁 File support up to 2 GB</li>
@@ -99,7 +114,7 @@
         
     </div>
 
-    <script src="locales.js?v=4"></script>
-    <script src="app.js?v=4"></script>
+    <script src="locales.js?v=6"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

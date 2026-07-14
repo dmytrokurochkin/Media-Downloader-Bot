@@ -24,7 +24,11 @@ const locales = {
         'limit_size': 'Макс. розмір:',
         'limit_playlist': 'Плейлисти:',
         'stat_unlimited': 'Безліміт',
-        'stat_daily_limit': 'Денний ліміт:'
+        'stat_daily_limit': 'Денний ліміт:',
+        'subscription_active': 'Ваша підписка:',
+        'subscription_expires': 'Закінчується:',
+        'subscription_days_left': 'Днів залишилось:',
+        'btn_extend_vip': 'Продовжити або покращити (Stars)'
     },
     'en': {
         'title_profile': 'My Profile',
@@ -51,7 +55,11 @@ const locales = {
         'limit_size': 'Max Size:',
         'limit_playlist': 'Playlists:',
         'stat_unlimited': 'Unlimited',
-        'stat_daily_limit': 'Daily Limit:'
+        'stat_daily_limit': 'Daily Limit:',
+        'subscription_active': 'Your subscription:',
+        'subscription_expires': 'Expires:',
+        'subscription_days_left': 'Days left:',
+        'btn_extend_vip': 'Extend or Upgrade (Stars)'
     },
     'ru': {
         'title_profile': 'Мой Профиль',
@@ -78,7 +86,11 @@ const locales = {
         'limit_size': 'Макс. размер:',
         'limit_playlist': 'Плейлисты:',
         'stat_unlimited': 'Безлимит',
-        'stat_daily_limit': 'Дневной лимит:'
+        'stat_daily_limit': 'Дневной лимит:',
+        'subscription_active': 'Ваша подписка:',
+        'subscription_expires': 'Истекает:',
+        'subscription_days_left': 'Дней осталось:',
+        'btn_extend_vip': 'Продлить или улучшить (Stars)'
     }
 };
 

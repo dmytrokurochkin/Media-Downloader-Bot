@@ -12,6 +12,7 @@ const topUsersStr = urlParams.get('tu') || '';
 const topSitesStr = urlParams.get('ts') || '';
 const botUsername = urlParams.get('b') || '';
 const userNameParam = urlParams.get('nm') || '';
+const vipUntilTs = parseInt(urlParams.get('vu') || '0');
 
 // Get user data from Telegram SDK if available, fallback to URL param
 let userFirstName = userNameParam || 'User';
@@ -58,6 +59,10 @@ function applyTranslations() {
     document.getElementById('label_top_sites').innerText = getText(lang, 'top_sites');
     document.getElementById('label_tier_vip_store').innerText = getText(lang, 'tier_vip');
     document.getElementById('buyVipBtn').innerText = getText(lang, 'buy_vip_btn');
+    
+    document.getElementById('label_sub_active').innerText = getText(lang, 'subscription_active');
+    document.getElementById('label_sub_expires').innerText = getText(lang, 'subscription_expires');
+    document.getElementById('label_sub_days').innerText = getText(lang, 'subscription_days_left');
     
     document.getElementById('label_vip_desc_1').innerText = getText(lang, 'vip_desc_1');
     document.getElementById('label_vip_desc_2').innerText = getText(lang, 'vip_desc_2');
@@ -106,7 +111,7 @@ function renderProfile() {
         
         // Slight delay for animation
         setTimeout(() => {
-            document.getElementById('usageProgressBar').style.width = pct + '%';
+            document.getElementById('usageProgressBar').style.transform = `scaleX(${pct / 100})`;
         }, 100);
     }
     
@@ -129,6 +134,23 @@ function renderProfile() {
         playlistEl.innerText = getText(lang, 'stat_unlimited');
     } else {
         playlistEl.innerText = limitPlaylist;
+    }
+    
+    // Store Section Active Sub
+    if (tier !== 'free' && vipUntilTs > 0) {
+        document.getElementById('activeSubInfo').style.display = 'block';
+        document.getElementById('activeSubTierName').innerText = getText(lang, 'tier_' + tier) || tier;
+        
+        const nowTs = Math.floor(Date.now() / 1000);
+        const diffDays = Math.max(0, Math.ceil((vipUntilTs - nowTs) / 86400));
+        
+        const dateObj = new Date(vipUntilTs * 1000);
+        const dateStr = dateObj.toLocaleDateString();
+        
+        document.getElementById('activeSubDate').innerText = dateStr;
+        document.getElementById('activeSubDays').innerText = diffDays;
+        
+        document.getElementById('buyVipBtn').innerText = getText(lang, 'btn_extend_vip');
     }
 }
 

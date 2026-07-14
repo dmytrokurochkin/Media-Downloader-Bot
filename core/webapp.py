@@ -1,4 +1,6 @@
 import urllib.parse
+import datetime
+from database import get_top_users, get_top_domains
 from database import get_top_users, get_top_domains
 from core.config import TIER_LIMITS
 
@@ -49,9 +51,21 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     sorted_domains = sorted(merged_counts.items(), key=lambda x: x[1], reverse=True)[:10]
     ts_str = ",".join([f"{domain.replace(',', '').replace(':', '')}:{count}" for domain, count in sorted_domains])
     
+    vip_until = user.get('vip_until')
+    vu_ts = 0
+    if vip_until:
+        try:
+            dt = datetime.datetime.fromisoformat(vip_until.replace(' ', 'T'))
+            # Ensure it has a timezone to convert to timestamp correctly
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            vu_ts = int(dt.timestamp())
+        except Exception:
+            pass
+
     # Build query parameters
     params = {
-        'v': 5, # Cache buster for the HTML file itself
+        'v': 6, # Cache buster for the HTML file itself
         'l': lang,
         't': tier,
         'u': used_downloads,
@@ -61,7 +75,8 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'tu': tu_str,
         'ts': ts_str,
         'b': bot_username,
-        'nm': user_name
+        'nm': user_name,
+        'vu': vu_ts
     }
     
     # URL Encode the parameters safely
