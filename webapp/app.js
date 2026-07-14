@@ -82,7 +82,10 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCursorPos(e);
             card.classList.add('touching');
             if (card.classList.contains('card')) {
-                try { tg.HapticFeedback.impactOccurred('heavy'); } catch(e){}
+                try { 
+                    tg.HapticFeedback.impactOccurred('heavy'); 
+                    setTimeout(() => tg.HapticFeedback.impactOccurred('rigid'), 10);
+                } catch(e){}
             }
         }, {passive: true});
         card.addEventListener('touchend', () => {
@@ -99,11 +102,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Swipe navigation logic
     let touchStartX = 0;
     let touchStartY = 0;
+    let lastSwipeVibrateX = 0;
     const swipeThreshold = 60; // minimum distance in px
     
     document.body.addEventListener('touchstart', (e) => {
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
+        lastSwipeVibrateX = 0;
+    }, {passive: true});
+    
+    document.body.addEventListener('touchmove', (e) => {
+        if (!touchStartX) return;
+        const currentX = e.changedTouches[0].screenX;
+        const currentY = e.changedTouches[0].screenY;
+        const deltaX = Math.abs(touchStartX - currentX);
+        const deltaY = Math.abs(touchStartY - currentY);
+        
+        // Only trigger crunch if horizontal movement is dominant
+        if (deltaX > deltaY && (deltaX - lastSwipeVibrateX > 25)) {
+            try { tg.HapticFeedback.selectionChanged(); } catch(e){} // crunchy zipper effect
+            lastSwipeVibrateX = deltaX;
+        }
     }, {passive: true});
 
     document.body.addEventListener('touchend', (e) => {
@@ -294,7 +313,7 @@ function switchTab(tabId, btnElement) {
     document.getElementById('pageTitle').innerText = getText(lang, 'title_' + tabId);
     
     // Haptic feedback
-    tg.HapticFeedback.selectionChanged();
+    try { tg.HapticFeedback.impactOccurred('heavy'); } catch(e){}
 }
 
 function buyVip() {
