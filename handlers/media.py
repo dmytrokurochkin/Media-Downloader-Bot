@@ -538,6 +538,26 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                     await add_download_record(user['telegram_id'], url, domain, page_title, p.stat().st_size, True)
         else:
             await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
+            
+        if success and not is_guest_mode:
+            # Update Menu Button Web App URL silently
+            try:
+                from core.webapp import generate_webapp_url
+                from aiogram.types import MenuButtonWebApp, WebAppInfo
+                
+                bot_info = await bot.get_me()
+                daily_count_updated = await get_daily_download_count(user['telegram_id'])
+                webapp_url = await generate_webapp_url(user, daily_count_updated, bot_info.username)
+                
+                await bot.set_chat_menu_button(
+                    chat_id=target_chat_id, 
+                    menu_button=MenuButtonWebApp(
+                        text=get_text(lang, 'menu_profile'), 
+                        web_app=WebAppInfo(url=webapp_url)
+                    )
+                )
+            except Exception as e:
+                print(f"Failed to update menu button after download: {e}")
         
         import shutil
         

@@ -2,10 +2,17 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from locales import get_text
 
-def get_main_keyboard(lang: str) -> ReplyKeyboardMarkup:
+from aiogram.types import WebAppInfo
+
+def get_main_keyboard(lang: str, webapp_url: str = None) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text=get_text(lang, 'menu_download'))
-    builder.button(text=get_text(lang, 'menu_profile'))
+    
+    if webapp_url:
+        builder.button(text=get_text(lang, 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+    else:
+        builder.button(text=get_text(lang, 'menu_profile'))
+        
     builder.button(text=get_text(lang, 'menu_vip'))
     builder.button(text=get_text(lang, 'menu_settings'))
     builder.button(text=get_text(lang, 'menu_help'))
