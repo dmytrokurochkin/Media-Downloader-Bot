@@ -230,6 +230,25 @@ async def help_command(message: Message, state: FSMContext):
 async def process_support_message(message: Message, state: FSMContext, bot: Bot):
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     
+    # Check if user pressed a menu button or sent a command
+    known_buttons = []
+    for lang in ['uk', 'en', 'pl']:
+        known_buttons.extend([
+            get_text(lang, 'menu_profile'),
+            get_text(lang, 'menu_download'),
+            get_text(lang, 'menu_settings'),
+            get_text(lang, 'menu_help'),
+            get_text(lang, 'menu_vip'),
+            get_text(lang, 'menu_hide_keyboard')
+        ])
+        
+    if message.text and (message.text in known_buttons or message.text.startswith('/')):
+        await state.clear()
+        cancel_msg = "❌ Введення скасовано. Натисніть кнопку ще раз." if user['language_code'] == 'uk' else "❌ Input cancelled. Please press the button again."
+        msg = await message.reply(cancel_msg)
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 10))
+        return
+
     if user.get('banned_support_until'):
         import datetime
         try:
