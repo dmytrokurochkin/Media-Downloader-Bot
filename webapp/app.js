@@ -72,6 +72,10 @@ function renderProfile() {
     const img = document.getElementById('userAvatar');
     if (userPhotoUrl) {
         img.src = userPhotoUrl;
+        img.onerror = function() {
+            this.onerror = null;
+            this.src = 'assets/avatars/1.jpg';
+        };
     } else {
         // Fallback to the default custom avatar
         img.src = `assets/avatars/1.jpg`;
