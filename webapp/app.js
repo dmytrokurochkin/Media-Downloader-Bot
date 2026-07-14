@@ -73,9 +73,9 @@ function renderProfile() {
     if (userPhotoUrl) {
         img.src = userPhotoUrl;
     } else {
-        // Generate a cool unique avatar based on the user's name using DiceBear API
-        // "bottts-neutral" creates a nice simple robot face
-        img.src = `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userFirstName)}&backgroundColor=8b5cf6,3b82f6`;
+        // Pick one of the 3 premium avatars deterministically based on username length
+        const avatarIndex = (userFirstName.length % 3) + 1;
+        img.src = `assets/avatars/${avatarIndex}.png`;
     }
     img.style.display = 'block';
     
