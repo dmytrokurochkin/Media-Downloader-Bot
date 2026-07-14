@@ -84,14 +84,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (card.classList.contains('card')) {
                 try { 
                     tg.HapticFeedback.impactOccurred('heavy'); 
-                    setTimeout(() => tg.HapticFeedback.impactOccurred('rigid'), 10);
+                    setTimeout(() => tg.HapticFeedback.impactOccurred('heavy'), 20);
+                    setTimeout(() => tg.HapticFeedback.impactOccurred('heavy'), 40);
                 } catch(e){}
             }
         }, {passive: true});
         card.addEventListener('touchend', () => {
             card.classList.remove('touching');
             if (card.classList.contains('card')) {
-                try { tg.HapticFeedback.impactOccurred('medium'); } catch(e){}
+                try { 
+                    tg.HapticFeedback.impactOccurred('heavy'); 
+                } catch(e){}
             }
         });
         card.addEventListener('touchcancel', () => {
@@ -119,8 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const deltaY = Math.abs(touchStartY - currentY);
         
         // Only trigger crunch if horizontal movement is dominant
-        if (deltaX > deltaY && (deltaX - lastSwipeVibrateX > 25)) {
-            try { tg.HapticFeedback.selectionChanged(); } catch(e){} // crunchy zipper effect
+        if (deltaX > deltaY && (deltaX - lastSwipeVibrateX > 15)) {
+            try { tg.HapticFeedback.impactOccurred('medium'); } catch(e){} // crunchy zipper effect
             lastSwipeVibrateX = deltaX;
         }
     }, {passive: true});
@@ -313,7 +316,10 @@ function switchTab(tabId, btnElement) {
     document.getElementById('pageTitle').innerText = getText(lang, 'title_' + tabId);
     
     // Haptic feedback
-    try { tg.HapticFeedback.impactOccurred('heavy'); } catch(e){}
+    try { 
+        tg.HapticFeedback.impactOccurred('heavy'); 
+        setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 30);
+    } catch(e){}
 }
 
 function buyVip() {
