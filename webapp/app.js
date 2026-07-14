@@ -89,9 +89,10 @@ function renderProfile() {
     badge.innerText = getText(lang, 'tier_' + tier) || tier;
     
     if (tier === 'vip' || tier === 'max' || tier === 'pro' || tier === 'admin') {
-        badge.style.background = 'rgba(139, 92, 246, 0.2)';
-        badge.style.color = '#8b5cf6';
-        badge.style.borderColor = 'rgba(139, 92, 246, 0.3)';
+        badge.style.background = 'rgba(255, 255, 255, 0.25)';
+        badge.style.color = '#ffffff';
+        badge.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+        badge.style.boxShadow = '0 0 10px rgba(255, 255, 255, 0.2)';
     }
 
     document.getElementById('userUsed').innerText = used;
