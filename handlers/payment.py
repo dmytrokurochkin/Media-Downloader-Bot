@@ -8,6 +8,8 @@ from core.config import VIP_TARIFFS, PAYMENT_PROVIDER_TOKEN
 from core.loader import bot
 from database import get_or_create_user, grant_vip
 from locales import get_text
+import asyncio
+from core.utils import delete_later
 
 payment_router = Router()
 
@@ -17,6 +19,7 @@ def text_matches(key):
 @payment_router.message(Command("vip"))
 @payment_router.message(text_matches('menu_vip'))
 async def vip_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     lang = user['language_code']
@@ -43,7 +46,8 @@ async def vip_command(message: Message, state: FSMContext):
                 builder.button(text=btn_text, callback_data=f"pay_stars_{t_key}")
         
     builder.adjust(2)
-    await message.reply(get_text(lang, 'vip_menu'), reply_markup=builder.as_markup(), parse_mode="HTML")
+    msg = await message.reply(get_text(lang, 'vip_menu'), reply_markup=builder.as_markup(), parse_mode="HTML")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @payment_router.callback_query(F.data.startswith("pay_stars_"))
 async def process_payment_selection(callback: CallbackQuery):

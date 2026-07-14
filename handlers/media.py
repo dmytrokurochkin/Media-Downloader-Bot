@@ -4,6 +4,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from core.utils import delete_later
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -157,20 +158,24 @@ async def text_handler(message: Message):
         
         if not is_guest_mode:
             if FORBIDDEN_URL_PATTERN.search(url):
-                await message.reply(get_text(user['language_code'], 'link_rejected'))
+                msg = await message.reply(get_text(user['language_code'], 'link_rejected'))
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                 return
             if message.from_user.id in user_cooldowns:
-                await message.reply(get_text(user['language_code'], 'cooldown'))
+                msg = await message.reply(get_text(user['language_code'], 'cooldown'))
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                 return
             daily_count = await get_daily_download_count(message.from_user.id)
             if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-                await message.reply(get_text(user['language_code'], 'limit_reached'))
+                msg = await message.reply(get_text(user['language_code'], 'limit_reached'))
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                 return
         else:
             if FORBIDDEN_URL_PATTERN.search(url) or message.from_user.id in user_cooldowns:
                 if message.from_user.id in user_cooldowns:
                     try:
-                        await message.reply(get_text(user['language_code'], 'cooldown'))
+                        msg = await message.reply(get_text(user['language_code'], 'cooldown'))
+                        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                     except Exception: pass
                 return
             daily_count = await get_daily_download_count(message.from_user.id)
@@ -251,19 +256,23 @@ async def youtube_callback(callback: CallbackQuery):
     tier = user.get('tier', 'free')
     
     if tier == 'free' and action in ['1080', 'best']:
-        await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
+        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         return
     if tier == 'pro' and action == 'best':
-        await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
+        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         return
         
     if callback.from_user.id in user_cooldowns:
-        await callback.message.reply(get_text(user['language_code'], 'cooldown'))
+        msg = await callback.message.reply(get_text(user['language_code'], 'cooldown'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         return
         
     daily_count = await get_daily_download_count(callback.from_user.id)
     if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-        await callback.message.reply(get_text(user['language_code'], 'limit_reached'))
+        msg = await callback.message.reply(get_text(user['language_code'], 'limit_reached'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         return
         
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
@@ -353,23 +362,20 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             if is_guest_mode:
                 filepath = filepath[:10]
             
+            caption = get_text(lang, 'caption_signature')
+
             for path in filepath:
                 file_size += path.stat().st_size
                 fs_file = FSInputFile(path=path, filename=path.name)
                 ext = path.suffix.lower()
                 if ext in ['.mp4', '.mkv', '.webm']:
-                    visual_group.append(InputMediaVideo(media=fs_file))
+                    visual_group.append(InputMediaVideo(media=fs_file, caption=caption if not visual_group else None))
                 elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                    visual_group.append(InputMediaPhoto(media=fs_file))
+                    visual_group.append(InputMediaPhoto(media=fs_file, caption=caption if not visual_group else None))
                 elif ext in ['.mp3', '.m4a', '.wav', '.opus']:
-                    audio_group.append(InputMediaAudio(media=fs_file))
+                    audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None))
                 elif ext not in ['.json', '.description', '.part', '.ytdl', '.spotdl']:
-                    document_group.append(InputMediaDocument(media=fs_file))
-            
-            caption = get_text(lang, 'caption_signature')
-            if visual_group: visual_group[0].caption = caption
-            if audio_group: audio_group[0].caption = caption
-            if document_group: document_group[0].caption = caption
+                    document_group.append(InputMediaDocument(media=fs_file, caption=caption if not document_group else None))
             
             async def send_group_in_chunks(group):
                 if is_guest_mode:
@@ -481,6 +487,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         if "SIZE_LIMIT_EXCEEDED" in error_msg:
             try:
                 await bot.edit_message_text(get_text(lang, 'size_limit_exceeded'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
             except Exception: pass
             return
             
@@ -488,6 +495,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             error_msg = error_msg[:3000] + "...\n[Error truncated]"
         try:
             await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+            asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
         except Exception:
             pass
             
@@ -531,16 +539,40 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         else:
             await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
         
-        if isinstance(filepath, list):
-            for p in filepath:
-                if p.exists():
-                    try: p.unlink()
-                    except Exception: pass
+        import shutil
+        
+        def safe_rmtree(path: Path):
             try:
-                if len(filepath) > 0: filepath[0].parent.rmdir()
-            except Exception: pass
+                if path.exists() and path.is_dir():
+                    shutil.rmtree(path)
+            except Exception:
+                pass
+
+        # Cleanup the session_dir in downloads
+        if isinstance(filepath, list) and len(filepath) > 0:
+            curr = filepath[0]
+            while curr.parent.name != 'downloads' and curr.name != '':
+                curr = curr.parent
+            if curr.parent.name == 'downloads':
+                safe_rmtree(curr)
+            else:
+                for p in filepath:
+                    if p.exists():
+                        try: p.unlink()
+                        except: pass
+                try: filepath[0].parent.rmdir()
+                except: pass
         elif filepath and filepath.exists():
-            try: filepath.unlink()
-            except Exception: pass
-            try: filepath.parent.rmdir()
-            except Exception: pass
+            curr = filepath
+            while curr.parent.name != 'downloads' and curr.name != '':
+                curr = curr.parent
+            if curr.parent.name == 'downloads':
+                safe_rmtree(curr)
+            else:
+                try: filepath.unlink()
+                except: pass
+                try: filepath.parent.rmdir()
+                except: pass
+                
+        # Also clean up old gallery-dl folder from root if it exists
+        safe_rmtree(Path('gallery-dl'))

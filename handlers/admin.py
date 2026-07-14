@@ -11,6 +11,7 @@ from core.loader import bot
 from database import get_or_create_user, get_all_users, grant_vip, revoke_vip, get_users_stats_by_tier, ban_user_bot, ban_user_support, unban_user
 from locales import get_text
 from keyboards.reply import get_admin_keyboard, get_admin_cancel_keyboard, get_main_keyboard
+from core.utils import delete_later
 
 admin_router = Router()
 
@@ -32,6 +33,7 @@ class AdminState(StatesGroup):
 
 @admin_router.message(Command("admin"))
 async def admin_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id):
         return
@@ -40,34 +42,41 @@ async def admin_command(message: Message, state: FSMContext):
     stats = await get_users_stats_by_tier()
     text = get_text(user['language_code'], 'admin_stats', total=stats['total'], free=stats['free'], pro=stats['pro'], max=stats['max'])
     
-    await message.reply(text, reply_markup=get_admin_keyboard(user['language_code']))
+    msg = await message.reply(text, reply_markup=get_admin_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @admin_router.message(text_matches('admin_btn_exit'))
 async def exit_admin_panel(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id):
         return
     await state.clear()
-    await message.reply(get_text(user['language_code'], 'admin_exit_msg'), reply_markup=get_main_keyboard(user['language_code']))
+    msg = await message.reply(get_text(user['language_code'], 'admin_exit_msg'), reply_markup=get_main_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @admin_router.message(text_matches('admin_btn_cancel'))
 async def cancel_admin_action(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id):
         return
     await state.clear()
-    await message.reply(get_text(user['language_code'], 'admin_cancel_msg'), reply_markup=get_admin_keyboard(user['language_code']))
+    msg = await message.reply(get_text(user['language_code'], 'admin_cancel_msg'), reply_markup=get_admin_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 # --- Broadcast ---
 @admin_router.message(text_matches('admin_btn_broadcast'))
 async def btn_broadcast(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(
+    msg = await message.reply(
         get_text(user['language_code'], 'admin_broadcast_prompt'), 
         reply_markup=get_admin_cancel_keyboard(user['language_code']),
         parse_mode="HTML"
     )
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_broadcast_message)
 
 @admin_router.message(AdminState.waiting_for_broadcast_message)
@@ -127,9 +136,11 @@ async def process_broadcast_button(message: Message, state: FSMContext):
 # --- Reply ---
 @admin_router.message(text_matches('admin_btn_reply'))
 async def btn_reply(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_reply_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_reply_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_reply)
 
 @admin_router.message(AdminState.waiting_for_reply)
@@ -159,9 +170,11 @@ async def process_reply(message: Message, state: FSMContext):
 # --- Give VIP ---
 @admin_router.message(text_matches('admin_btn_give_vip'))
 async def btn_give_vip(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_give_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_give_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_give_vip)
 
 @admin_router.message(AdminState.waiting_for_give_vip)
@@ -204,9 +217,11 @@ async def process_give_vip(message: Message, state: FSMContext):
 # --- Remove VIP ---
 @admin_router.message(text_matches('admin_btn_revoke_vip'))
 async def btn_remove_vip(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_revoke_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_revoke_vip_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_remove_vip)
 
 @admin_router.message(AdminState.waiting_for_remove_vip)
@@ -226,9 +241,11 @@ async def process_remove_vip(message: Message, state: FSMContext):
 # --- Ban Bot ---
 @admin_router.message(text_matches('admin_btn_ban_bot'))
 async def btn_ban_bot(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_ban_bot_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_ban_bot_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_ban_bot)
 
 @admin_router.message(AdminState.waiting_for_ban_bot)
@@ -256,9 +273,11 @@ async def process_ban_bot(message: Message, state: FSMContext):
 # --- Ban Support ---
 @admin_router.message(text_matches('admin_btn_ban_support'))
 async def btn_ban_support(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_ban_support_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_ban_support_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_ban_support)
 
 @admin_router.message(AdminState.waiting_for_ban_support)
@@ -286,9 +305,11 @@ async def process_ban_support(message: Message, state: FSMContext):
 # --- Unban ---
 @admin_router.message(text_matches('admin_btn_unban'))
 async def btn_unban(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    await message.reply(get_text(user['language_code'], 'admin_unban_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    msg = await message.reply(get_text(user['language_code'], 'admin_unban_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']), parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(AdminState.waiting_for_unban)
 
 @admin_router.message(AdminState.waiting_for_unban)

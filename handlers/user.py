@@ -10,6 +10,9 @@ from locales import get_text
 from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard
 from keyboards.reply import get_main_keyboard
 from core.config import TIER_LIMITS, ADMIN_IDS
+import asyncio
+from core.utils import delete_later
+from core.loader import bot
 
 user_router = Router()
 
@@ -18,9 +21,11 @@ class SupportState(StatesGroup):
 
 @user_router.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    await message.reply(get_text(user['language_code'], 'start'), reply_markup=get_main_keyboard(user['language_code']))
+    msg = await message.reply(get_text(user['language_code'], 'start'), reply_markup=get_main_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 # Helper to check if text matches a key in any language
 def text_matches(key):
@@ -28,23 +33,29 @@ def text_matches(key):
 
 @user_router.message(text_matches('menu_download'))
 async def guide_handler(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    await message.reply(get_text(user['language_code'], 'guide_text'))
+    msg = await message.reply(get_text(user['language_code'], 'guide_text'))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.message(text_matches('menu_hide_keyboard'))
 async def hide_keyboard_handler(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    await message.reply(get_text(user['language_code'], 'keyboard_hidden'), reply_markup=ReplyKeyboardRemove())
+    msg = await message.reply(get_text(user['language_code'], 'keyboard_hidden'), reply_markup=ReplyKeyboardRemove())
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.message(Command('settings'))
 @user_router.message(text_matches('menu_settings'))
 async def settings_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     text = get_text(user['language_code'], 'settings_menu_text')
-    await message.reply(text, reply_markup=get_settings_main_keyboard(user['language_code']))
+    msg = await message.reply(text, reply_markup=get_settings_main_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.callback_query(F.data == "set_lang")
 async def settings_set_lang(callback: CallbackQuery):
@@ -63,7 +74,8 @@ async def language_callback(callback: CallbackQuery):
     lang_code = callback.data.split('_')[1]
     await set_user_language(callback.from_user.id, lang_code)
     # Змінюємо мову головної клавіатури
-    await callback.message.answer(get_text(lang_code, 'lang_changed'), reply_markup=get_main_keyboard(lang_code))
+    msg = await callback.message.answer(get_text(lang_code, 'lang_changed'), reply_markup=get_main_keyboard(lang_code))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await callback.message.delete()
 
 @user_router.callback_query(F.data.startswith('setyt_'))
@@ -87,6 +99,7 @@ def get_progress_bar(current, maximum, length=10):
 @user_router.message(Command("limits"))
 @user_router.message(text_matches('menu_profile'))
 async def limits_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     daily_count = await get_daily_download_count(message.from_user.id)
@@ -134,11 +147,13 @@ async def limits_command(message: Message, state: FSMContext):
         max_playlist=max_playlist,
         progress_bar=progress_bar
     )
-    await message.reply(text)
+    msg = await message.reply(text)
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.message(Command("help"))
 @user_router.message(text_matches('menu_help'))
 async def help_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     
     if user.get('banned_support_until'):
@@ -158,7 +173,8 @@ async def help_command(message: Message, state: FSMContext):
         except Exception:
             pass
 
-    await message.reply(get_text(user['language_code'], 'support_prompt'))
+    msg = await message.reply(get_text(user['language_code'], 'support_prompt'))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await state.set_state(SupportState.waiting_for_message)
 
 @user_router.message(SupportState.waiting_for_message, ~F.text.startswith('http'))
@@ -196,6 +212,7 @@ async def process_support_message(message: Message, state: FSMContext, bot: Bot)
 
 @user_router.message(Command("top", "leaderboard"))
 async def top_command(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     top_users = await get_top_users(10)
@@ -248,4 +265,5 @@ async def top_command(message: Message, state: FSMContext):
             medal = medals[i] if i < 3 else f"{i+1}."
             text += f"{medal} {domain} — {count}\n"
             
-    await message.reply(text, parse_mode="Markdown")
+    msg = await message.reply(text, parse_mode="Markdown")
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
