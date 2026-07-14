@@ -18,15 +18,16 @@ class ThrottlingMiddleware(BaseMiddleware):
     ) -> Any:
         
         user_id = None
-        lang = 'uk'
         if isinstance(event, (Message, CallbackQuery)):
             user_id = event.from_user.id
-            lang = event.from_user.language_code or 'en'
             
         if user_id:
             if user_id in self.cache:
                 # Spam detected, ignore the event
                 if isinstance(event, CallbackQuery):
+                    from database import get_or_create_user
+                    user = await get_or_create_user(user_id, event.from_user.username, event.from_user.full_name)
+                    lang = user.get('language_code', 'en')
                     await event.answer(get_text(lang, 'too_fast'), show_alert=False)
                 return
             else:

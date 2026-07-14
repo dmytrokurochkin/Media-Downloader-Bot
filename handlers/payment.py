@@ -95,8 +95,18 @@ async def cancel_tier_change(callback: CallbackQuery):
     await callback.message.edit_text(get_text(user['language_code'], 'tier_change_cancelled'))
 
 async def _send_invoice(callback: CallbackQuery, tariff_key: str, tariff: dict, user: dict):
-    title = f"VIP {tariff['days']} Days"
-    description = f"Purchase VIP subscription for {tariff['days']} days"
+    lang = user.get('language_code', 'en')
+    
+    if lang == 'uk':
+        title = f"VIP на {tariff['days']} Днів"
+        description = f"Придбання VIP підписки на {tariff['days']} днів"
+    elif lang == 'pl':
+        title = f"VIP na {tariff['days']} Dni"
+        description = f"Zakup subskrypcji VIP na {tariff['days']} dni"
+    else:
+        title = f"VIP {tariff['days']} Days"
+        description = f"Purchase VIP subscription for {tariff['days']} days"
+        
     payload = f"vip_{tariff_key}_{callback.from_user.id}"
     
     prices = [LabeledPrice(label="XTR", amount=tariff['stars'])]
