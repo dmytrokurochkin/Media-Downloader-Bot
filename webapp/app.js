@@ -73,9 +73,8 @@ function renderProfile() {
     if (userPhotoUrl) {
         img.src = userPhotoUrl;
     } else {
-        // Pick one of the 3 premium avatars deterministically based on username length
-        const avatarIndex = (userFirstName.length % 3) + 1;
-        img.src = `assets/avatars/${avatarIndex}.png`;
+        // Fallback to the default custom avatar
+        img.src = `assets/avatars/1.jpg`;
     }
     img.style.display = 'block';
     
