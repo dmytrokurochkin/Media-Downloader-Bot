@@ -81,9 +81,50 @@ document.addEventListener('DOMContentLoaded', () => {
         card.addEventListener('touchstart', (e) => {
             updateCursorPos(e);
             card.classList.add('touching');
-        });
+        }, {passive: true});
         card.addEventListener('touchend', () => card.classList.remove('touching'));
         card.addEventListener('touchcancel', () => card.classList.remove('touching'));
+    });
+
+    // Swipe navigation logic
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const swipeThreshold = 60; // minimum distance in px
+    
+    document.body.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }, {passive: true});
+
+    document.body.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].screenX;
+        const touchEndY = e.changedTouches[0].screenY;
+        
+        const deltaX = touchStartX - touchEndX;
+        const deltaY = Math.abs(touchStartY - touchEndY);
+        
+        // Prevent swipe if vertical scrolling was dominant
+        if (Math.abs(deltaX) > deltaY && Math.abs(deltaX) > swipeThreshold) {
+            const tabs = ['profile', 'leaderboard', 'store'];
+            let currentIndex = 0;
+            document.querySelectorAll('.section').forEach((sec, idx) => {
+                if (sec.classList.contains('active')) currentIndex = idx;
+            });
+            
+            let targetIndex = currentIndex;
+            if (deltaX > 0) {
+                // Swiped left -> Next tab
+                targetIndex = Math.min(tabs.length - 1, currentIndex + 1);
+            } else {
+                // Swiped right -> Prev tab
+                targetIndex = Math.max(0, currentIndex - 1);
+            }
+            
+            if (targetIndex !== currentIndex) {
+                const navItems = document.querySelectorAll('.nav-item');
+                switchTab(tabs[targetIndex], navItems[targetIndex]);
+            }
+        }
     });
 });
 
@@ -233,7 +274,7 @@ function renderLeaderboards() {
 function switchTab(tabId, btnElement) {
     // Update active nav button
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    btnElement.classList.add('active');
+    if (btnElement) btnElement.classList.add('active');
     
     // Update active section
     document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
