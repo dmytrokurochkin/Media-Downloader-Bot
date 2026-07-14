@@ -64,8 +64,13 @@ function applyTranslations() {
     document.getElementById('label_sub_expires').innerText = getText(lang, 'subscription_expires');
     document.getElementById('label_sub_days').innerText = getText(lang, 'subscription_days_left');
     
-    document.getElementById('label_vip_desc_1').innerText = getText(lang, 'vip_desc_1');
-    document.getElementById('label_vip_desc_2').innerText = getText(lang, 'vip_desc_2');
+    if (tier === 'pro') {
+        document.getElementById('label_vip_desc_1').innerText = getText(lang, 'pro_desc_1');
+        document.getElementById('label_vip_desc_2').innerText = getText(lang, 'pro_desc_2');
+    } else {
+        document.getElementById('label_vip_desc_1').innerText = getText(lang, 'vip_desc_1');
+        document.getElementById('label_vip_desc_2').innerText = getText(lang, 'vip_desc_2');
+    }
     document.getElementById('label_vip_desc_3').innerText = getText(lang, 'vip_desc_3');
     document.getElementById('label_vip_desc_4').innerText = getText(lang, 'vip_desc_4');
     

@@ -38,8 +38,7 @@ async def main():
     dp.message.outer_middleware(ban_middleware)
     dp.callback_query.outer_middleware(ban_middleware)
     dp.inline_query.outer_middleware(ban_middleware)
-    
-    print("Запуск бота...")
+
     allowed = dp.resolve_used_update_types()
     if "guest_message" not in allowed:
         allowed.append("guest_message")
