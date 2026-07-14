@@ -17,7 +17,6 @@ from middlewares.throttling import ThrottlingMiddleware
 logging.basicConfig(level=logging.INFO)
 
 async def main():
-    print("Ініціалізація бази даних...")
     await init_db()
     
     import handlers.media
