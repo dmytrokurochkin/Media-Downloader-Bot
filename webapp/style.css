@@ -65,6 +65,11 @@ body {
     box-shadow: 
         0 8px 32px 0 rgba(0, 0, 0, 0.3),
         inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    /* Fix for iOS Safari backdrop-filter rendering glitches */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
 /* Header */
@@ -94,9 +99,13 @@ body {
     display: block;
 }
 
+.fade-in {
+    animation: fadeIn 0.4s ease-out both;
+}
+
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 /* Cards */
