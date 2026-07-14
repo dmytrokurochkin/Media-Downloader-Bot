@@ -81,6 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
         card.addEventListener('touchstart', (e) => {
             updateCursorPos(e);
             card.classList.add('touching');
+            if (card.classList.contains('card')) {
+                try { tg.HapticFeedback.impactOccurred('light'); } catch(e){}
+            }
         }, {passive: true});
         card.addEventListener('touchend', () => card.classList.remove('touching'));
         card.addEventListener('touchcancel', () => card.classList.remove('touching'));
