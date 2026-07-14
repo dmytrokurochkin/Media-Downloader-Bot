@@ -8,3 +8,5 @@ requests
 beautifulsoup4
 aiosqlite
 Babel
+mutagen
+Pillow

@@ -117,7 +117,7 @@ ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do curl -sf http://127.0.0.1:8
 ExecStart=${WORK_DIR}/venv/bin/python3 main.py
 Restart=always
 RestartSec=10
-Environment="PATH=${WORK_DIR}/venv/bin:%E/PATH"
+Environment="PATH=${WORK_DIR}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 [Install]
 WantedBy=multi-user.target
