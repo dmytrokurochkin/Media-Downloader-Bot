@@ -82,11 +82,18 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCursorPos(e);
             card.classList.add('touching');
             if (card.classList.contains('card')) {
-                try { tg.HapticFeedback.impactOccurred('light'); } catch(e){}
+                try { tg.HapticFeedback.impactOccurred('heavy'); } catch(e){}
             }
         }, {passive: true});
-        card.addEventListener('touchend', () => card.classList.remove('touching'));
-        card.addEventListener('touchcancel', () => card.classList.remove('touching'));
+        card.addEventListener('touchend', () => {
+            card.classList.remove('touching');
+            if (card.classList.contains('card')) {
+                try { tg.HapticFeedback.impactOccurred('medium'); } catch(e){}
+            }
+        });
+        card.addEventListener('touchcancel', () => {
+            card.classList.remove('touching');
+        });
     });
 
     // Swipe navigation logic
