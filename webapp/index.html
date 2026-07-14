@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Media Downloader Bot</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="header glass">
+            <h1 id="pageTitle">Мій Профіль</h1>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="content">
+            
+            <!-- Profile Section -->
+            <section id="section-profile" class="section active">
+                <div class="card glass center-text fade-in">
+                    <div class="avatar-placeholder">
+                        <span id="userInitial">U</span>
+                    </div>
+                    <h2 id="userName" class="user-name">User</h2>
+                    <div class="badge" id="userTierBadge">Free</div>
+                </div>
+
+                <div class="card glass fade-in" style="animation-delay: 0.1s">
+                    <div class="stat-row">
+                        <span id="label_stat_downloads">Downloads today:</span>
+                        <span class="stat-value"><span id="userUsed">0</span> / <span id="userLimit">0</span></span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="usageProgressBar"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Leaderboard Section -->
+            <section id="section-leaderboard" class="section">
+                <div class="card glass fade-in">
+                    <h3 id="label_top_users" class="section-title">Top Users</h3>
+                    <ul class="leaderboard-list" id="topUsersList">
+                        <!-- Filled via JS -->
+                    </ul>
+                </div>
+                <div class="card glass fade-in" style="animation-delay: 0.1s">
+                    <h3 id="label_top_sites" class="section-title">Popular Sites</h3>
+                    <ul class="leaderboard-list" id="topSitesList">
+                        <!-- Filled via JS -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Store Section -->
+            <section id="section-store" class="section">
+                <div class="card glass vip-card fade-in">
+                    <div class="vip-icon">💎</div>
+                    <h2 id="label_tier_vip_store">VIP Access</h2>
+                    <ul class="vip-features">
+                        <li id="label_vip_desc_1">🚀 Unlimited downloads</li>
+                        <li id="label_vip_desc_2">📁 File support up to 2 GB</li>
+                        <li id="label_vip_desc_3">⚡ Maximum speed</li>
+                        <li id="label_vip_desc_4">🎶 High quality audio</li>
+                    </ul>
+                    <button class="primary-btn pulse" id="buyVipBtn" onclick="buyVip()">Buy VIP (Stars)</button>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav glass">
+            <button class="nav-item active" onclick="switchTab('profile', this)">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                <span id="tab_profile">Profile</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('leaderboard', this)">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M16 11V3H8v6H2v12h20V11h-6zm-6-6h4v14h-4V5zm-6 6h4v8H4v-8zm16 8h-4v-6h4v6z"/></svg>
+                <span id="tab_leaderboard">Ranks</span>
+            </button>
+            <button class="nav-item" onclick="switchTab('store', this)">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                <span id="tab_store">Store</span>
+            </button>
+        </nav>
+        
+    </div>
+
+    <script src="locales.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
