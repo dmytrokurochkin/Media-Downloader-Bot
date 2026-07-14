@@ -47,6 +47,8 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    overflow-y: scroll; /* Force scrollbar track to always be present to prevent layout shift */
+    scrollbar-gutter: stable;
     padding-bottom: 100px; /* Space for bottom nav */
 }
 
