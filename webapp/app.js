@@ -28,6 +28,16 @@ if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
 
 // Set up UI
 document.addEventListener('DOMContentLoaded', () => {
+    if (tg.expand) {
+        tg.expand(); // Expand to full height
+    }
+    if (tg.requestFullscreen) {
+        try {
+            tg.requestFullscreen(); // Force modern Fullscreen mode if supported
+        } catch (e) {
+            console.error("Fullscreen not supported or failed", e);
+        }
+    }
     applyTranslations();
     renderProfile();
     renderLeaderboards();
