@@ -69,14 +69,15 @@ function applyTranslations() {
 function renderProfile() {
     document.getElementById('userName').innerText = userFirstName;
     
+    const img = document.getElementById('userAvatar');
     if (userPhotoUrl) {
-        document.getElementById('userInitial').style.display = 'none';
-        const img = document.getElementById('userAvatar');
         img.src = userPhotoUrl;
-        img.style.display = 'block';
     } else {
-        document.getElementById('userInitial').innerText = userFirstName.charAt(0).toUpperCase();
+        // Generate a cool unique avatar based on the user's name using DiceBear API
+        // "bottts-neutral" creates a nice simple robot face
+        img.src = `https://api.dicebear.com/9.x/bottts-neutral/svg?seed=${encodeURIComponent(userFirstName)}&backgroundColor=8b5cf6,3b82f6`;
     }
+    img.style.display = 'block';
     
     const badge = document.getElementById('userTierBadge');
     badge.innerText = getText(lang, 'tier_' + tier) || tier;
