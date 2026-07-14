@@ -43,15 +43,19 @@ async def start_handler(message: Message, state: FSMContext):
     webapp_url = await generate_webapp_url(user, daily_count, bot_info.username)
     
     # Set the Main Menu Web App Button
-    try:
-        await bot.set_chat_menu_button(
-            chat_id=message.chat.id, 
-            menu_button=MenuButtonWebApp(text=get_text(user['language_code'], 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
-        )
-    except Exception as e:
-        print("Failed to set menu button:", e)
+    if message.chat.type == "private":
+        try:
+            await bot.set_chat_menu_button(
+                chat_id=message.chat.id, 
+                menu_button=MenuButtonWebApp(text=get_text(user['language_code'], 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+            )
+        except Exception as e:
+            print("Failed to set menu button:", e)
+        reply_markup = get_main_keyboard(user['language_code'], webapp_url)
+    else:
+        reply_markup = get_main_keyboard(user['language_code'], None)
         
-    msg = await message.reply(get_text(user['language_code'], 'start'), reply_markup=get_main_keyboard(user['language_code'], webapp_url))
+    msg = await message.reply(get_text(user['language_code'], 'start'), reply_markup=reply_markup)
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 # Helper to check if text matches a key in any language
@@ -107,15 +111,19 @@ async def language_callback(callback: CallbackQuery):
     daily_count = await get_daily_download_count(callback.from_user.id)
     webapp_url = await generate_webapp_url(user, daily_count, bot_info.username)
     
-    try:
-        await bot.set_chat_menu_button(
-            chat_id=callback.message.chat.id, 
-            menu_button=MenuButtonWebApp(text=get_text(lang_code, 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
-        )
-    except: pass
+    if callback.message.chat.type == "private":
+        try:
+            await bot.set_chat_menu_button(
+                chat_id=callback.message.chat.id, 
+                menu_button=MenuButtonWebApp(text=get_text(lang_code, 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+            )
+        except: pass
+        reply_markup = get_main_keyboard(lang_code, webapp_url)
+    else:
+        reply_markup = get_main_keyboard(lang_code, None)
 
     # Змінюємо мову головної клавіатури
-    msg = await callback.message.answer(get_text(lang_code, 'lang_changed'), reply_markup=get_main_keyboard(lang_code, webapp_url))
+    msg = await callback.message.answer(get_text(lang_code, 'lang_changed'), reply_markup=reply_markup)
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
     await callback.message.delete()
 
