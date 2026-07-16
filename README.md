@@ -27,11 +27,11 @@
 
 ## 🖼️ Демонстрація роботи
 
-| Головне меню та Mini App | Завантаження з YouTube |
-| :---: | :---: |
-| <img src="assets/demo-webapp.jpg" width="250" /> | <img src="assets/demo-youtube.jpg" width="250" /> |
-| **Музика зі Spotify** | **Guest Mode** |
-| <img src="assets/demo-spotify.jpg" width="250" /> | <img src="assets/demo-guest.jpg" width="250" /> |
+| Головне меню та Mini App | Таблиця лідерів (Leaderboard) | VIP Магазин (Store) |
+| :---: | :---: | :---: |
+| <img src="assets/demo-webapp.jpg" width="250" /> | <img src="assets/demo-leaderboard.jpg" width="250" /> | <img src="assets/demo-store.jpg" width="250" /> |
+| **Завантаження з YouTube** | **Музика зі Spotify** | **Guest Mode** |
+| <img src="assets/demo-youtube.jpg" width="250" /> | <img src="assets/demo-spotify.jpg" width="250" /> | <img src="assets/demo-guest.jpg" width="250" /> |
 
 ---
 
