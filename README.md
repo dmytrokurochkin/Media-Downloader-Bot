@@ -27,17 +27,11 @@
 
 ## 🖼️ Демонстрація роботи
 
-### 1. Головне меню та Mini App
-![Mini App Profile](assets/demo-webapp.jpg)
-
-### 2. Завантаження відео з YouTube
-![YouTube Download](assets/demo-youtube.jpg)
-
-### 3. Завантаження музики зі Spotify
-![Spotify Download](assets/demo-spotify.jpg)
-
-### 4. Завантаження медіа в Guest Mode
-![Guest Mode Download](assets/demo-guest.jpg)
+| Головне меню та Mini App | Завантаження з YouTube |
+| :---: | :---: |
+| <img src="assets/demo-webapp.jpg" width="250" /> | <img src="assets/demo-youtube.jpg" width="250" /> |
+| **Музика зі Spotify** | **Guest Mode** |
+| <img src="assets/demo-spotify.jpg" width="250" /> | <img src="assets/demo-guest.jpg" width="250" /> |
 
 ---
 
