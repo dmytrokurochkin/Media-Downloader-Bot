@@ -16,6 +16,8 @@ if ERROR_LOG_CHANNEL_ID:
     except ValueError:
         ERROR_LOG_CHANNEL_ID = None
 
+BOT_USERNAME = os.getenv("BOT_USERNAME", "MediaDownloaderForGroups_bot").replace('@', '')
+
 # Database path
 DB_PATH = Path("database.db")
 

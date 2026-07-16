@@ -12,11 +12,13 @@ echo -e "${BLUE}=== Автоматичне налаштування Telegram Med
 echo -e "\n${BLUE}[1/7] Налаштування змінних оточення...${NC}"
 if [ ! -f .env ]; then
     read -p "Введіть BOT_TOKEN: " bot_token
+    read -p "Введіть BOT_USERNAME (без @, наприклад SaveMDLBot): " bot_username
     read -p "Введіть ваш API_ID (з my.telegram.org): " api_id
     read -p "Введіть ваш API_HASH (з my.telegram.org): " api_hash
 
     cat > .env <<EOL
 BOT_TOKEN=${bot_token}
+BOT_USERNAME=${bot_username}
 LOCAL_API_SERVER_URL=http://127.0.0.1:8081
 API_ID=${api_id}
 API_HASH=${api_hash}
