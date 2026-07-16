@@ -30,7 +30,10 @@ const locales = {
         'subscription_active': 'Ваша підписка:',
         'subscription_expires': 'Закінчується:',
         'subscription_days_left': 'Днів залишилось:',
-        'btn_extend_vip': 'Продовжити або покращити (Stars)'
+        'btn_extend_vip': 'Продовжити або покращити (Stars)',
+        'settings': 'Налаштування',
+        'vibration': 'Вібрація (Haptic)',
+        'btn_close': 'Закрити'
     },
     'en': {
         'title_profile': 'My Profile',
@@ -63,7 +66,10 @@ const locales = {
         'subscription_active': 'Your subscription:',
         'subscription_expires': 'Expires:',
         'subscription_days_left': 'Days left:',
-        'btn_extend_vip': 'Extend or Upgrade (Stars)'
+        'btn_extend_vip': 'Extend or Upgrade (Stars)',
+        'settings': 'Settings',
+        'vibration': 'Vibration (Haptic)',
+        'btn_close': 'Close'
     },
     'pl': {
         'title_profile': 'Mój Profil',
@@ -95,7 +101,10 @@ const locales = {
         'subscription_active': 'Twoja subskrypcja:',
         'subscription_expires': 'Wygasa:',
         'subscription_days_left': 'Pozostało dni:',
-        'btn_extend_vip': 'Przedłuż lub ulepsz (Stars)'
+        'btn_extend_vip': 'Przedłuż lub ulepsz (Stars)',
+        'settings': 'Ustawienia',
+        'vibration': 'Wibracje (Haptic)',
+        'btn_close': 'Zamknij'
     }
 };
 

@@ -1,5 +1,13 @@
 const tg = window.Telegram.WebApp;
 
+let hapticEnabled = localStorage.getItem('hapticEnabled') !== 'false';
+
+function triggerHaptic(style) {
+    if (hapticEnabled) {
+        try { tg.HapticFeedback.impactOccurred(style); } catch(e){}
+    }
+}
+
 // Extract URL parameters
 const urlParams = new URLSearchParams(window.location.search);
 const lang = urlParams.get('l') || 'uk';
@@ -49,6 +57,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tell Telegram app is ready
     tg.ready();
     
+    const toggle = document.getElementById('vibrationToggle');
+    if (toggle) {
+        toggle.checked = hapticEnabled;
+        toggle.addEventListener('change', (e) => {
+            hapticEnabled = e.target.checked;
+            localStorage.setItem('hapticEnabled', hapticEnabled);
+            triggerHaptic('medium');
+        });
+    }
+    
     // Interactive spotlight and prism effect
     const updateCursorPos = (e) => {
         let clientX = e.clientX;
@@ -83,9 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
             card.classList.add('touching');
             if (card.classList.contains('card')) {
                 try { 
-                    tg.HapticFeedback.impactOccurred('heavy'); 
-                    setTimeout(() => tg.HapticFeedback.impactOccurred('heavy'), 20);
-                    setTimeout(() => tg.HapticFeedback.impactOccurred('heavy'), 40);
+                    triggerHaptic('heavy'); 
+                    setTimeout(() => triggerHaptic('heavy'), 20);
+                    setTimeout(() => triggerHaptic('heavy'), 40);
                 } catch(e){}
             }
         }, {passive: true});
@@ -93,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.classList.remove('touching');
             if (card.classList.contains('card')) {
                 try { 
-                    tg.HapticFeedback.impactOccurred('heavy'); 
+                    triggerHaptic('heavy'); 
                 } catch(e){}
             }
         });
@@ -123,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Only trigger crunch if horizontal movement is dominant
         if (deltaX > deltaY && (deltaX - lastSwipeVibrateX > 15)) {
-            try { tg.HapticFeedback.impactOccurred('medium'); } catch(e){} // crunchy zipper effect
+            try { triggerHaptic('medium'); } catch(e){} // crunchy zipper effect
             lastSwipeVibrateX = deltaX;
         }
     }, {passive: true});
@@ -187,6 +205,10 @@ function applyTranslations() {
     document.getElementById('tab_profile').innerText = getText(lang, 'title_profile');
     document.getElementById('tab_leaderboard').innerText = getText(lang, 'title_leaderboard');
     document.getElementById('tab_store').innerText = getText(lang, 'title_store');
+    
+    document.getElementById('label_settings').innerText = getText(lang, 'settings');
+    document.getElementById('label_vibration').innerText = getText(lang, 'vibration');
+    document.getElementById('btn_close_settings').innerText = getText(lang, 'btn_close');
 }
 
 function renderProfile() {
@@ -317,13 +339,13 @@ function switchTab(tabId, btnElement) {
     
     // Haptic feedback
     try { 
-        tg.HapticFeedback.impactOccurred('heavy'); 
-        setTimeout(() => tg.HapticFeedback.impactOccurred('medium'), 30);
+        triggerHaptic('heavy'); 
+        setTimeout(() => triggerHaptic('medium'), 30);
     } catch(e){}
 }
 
 function buyVip() {
-    tg.HapticFeedback.impactOccurred('medium');
+    triggerHaptic('medium');
     
     tg.showConfirm(getText(lang, 'payment_redirect_alert'), function(confirmed) {
         if (confirmed) {
@@ -339,4 +361,25 @@ function buyVip() {
             }
         }
     });
+}
+
+function toggleSettings() {
+    triggerHaptic('medium');
+    const modal = document.getElementById('settingsModal');
+    const toggle = document.getElementById('vibrationToggle');
+    
+    if (modal.style.display === 'none' || !modal.style.display) {
+        toggle.checked = hapticEnabled;
+        modal.style.display = 'flex';
+        // Force reflow
+        void modal.offsetWidth;
+        modal.style.opacity = '1';
+        modal.querySelector('.modal-content').style.transform = 'scale(1)';
+    } else {
+        modal.style.opacity = '0';
+        modal.querySelector('.modal-content').style.transform = 'scale(0.9)';
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+    }
 }

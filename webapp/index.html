@@ -12,8 +12,12 @@
     <div class="app-container">
         
         <!-- Header -->
-        <header class="header glass">
-            <h1 id="pageTitle">Мій Профіль</h1>
+        <header class="header glass" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="width: 24px;"></div>
+            <h1 id="pageTitle" style="margin: 0; flex: 1;">Мій Профіль</h1>
+            <div class="settings-icon" onclick="toggleSettings()" style="width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+            </div>
         </header>
 
         <!-- Main Content Area -->
@@ -95,6 +99,23 @@
             </section>
 
         </main>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal-overlay" style="display: none;">
+            <div class="card glass center-text modal-content">
+                <h3 id="label_settings" style="margin-bottom: 1.5rem; font-size: 1.25rem;">Settings</h3>
+                
+                <div class="setting-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; text-align: left;">
+                    <span id="label_vibration" style="font-weight: 500;">Vibration (Haptic)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="vibrationToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                
+                <button class="primary-btn" onclick="toggleSettings()" id="btn_close_settings">Close</button>
+            </div>
+        </div>
 
         <!-- Bottom Navigation -->
         <nav class="bottom-nav glass">
