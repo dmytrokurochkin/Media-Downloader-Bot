@@ -59,7 +59,7 @@ body {
     max-width: 600px;
     margin: 0 auto;
     padding: 1rem;
-    padding-top: calc(1rem + var(--tg-safe-area-inset-top, 30px));
+    padding-top: calc(3rem + var(--tg-safe-area-inset-top, 40px));
 }
 
 .glass {
@@ -129,7 +129,7 @@ body {
 /* Header */
 .header {
     position: sticky;
-    top: 0;
+    top: calc(1rem + var(--tg-safe-area-inset-top, 40px));
     z-index: 100;
     padding: 1rem;
     border-radius: 24px;
