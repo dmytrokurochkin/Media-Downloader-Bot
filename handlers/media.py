@@ -539,7 +539,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         else:
             await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
             
-        if success and not is_guest_mode:
+        if success and not is_guest_mode and message.chat.type == "private":
             # Update Menu Button Web App URL silently
             try:
                 from core.webapp import generate_webapp_url

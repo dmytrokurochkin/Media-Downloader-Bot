@@ -52,10 +52,16 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
             cmd = [
                 sys.executable, "-m", "spotdl",
                 str(save_file),
-                "--output", str(session_dir) + "/{title} - {artist}.{output-ext}",
+                "--output", str(session_dir / "{title} - {artist}.{output-ext}"),
                 "--audio", "youtube-music", "youtube",
                 "--log-level", "ERROR"
             ]
+            import os
+            from pathlib import Path
+            ffmpeg_winget = Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'ffmpeg-8.1.2-full_build' / 'bin' / 'ffmpeg.exe'
+            if ffmpeg_winget.exists():
+                cmd.extend(["--ffmpeg", str(ffmpeg_winget)])
+                
             subprocess.run(cmd, check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
         except subprocess.CalledProcessError as e:
             err_msg = e.stderr if e.stderr else "Невідома помилка"
