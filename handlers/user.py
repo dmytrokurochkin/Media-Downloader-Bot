@@ -162,9 +162,10 @@ async def limits_command(message: Message, state: FSMContext):
     else: status = tier.capitalize()
     
     if is_vip and user.get('vip_until'):
+        from core.utils import parse_db_date
         from datetime import datetime, timezone
         try:
-            dt = datetime.fromisoformat(user['vip_until'].replace(' ', 'T'))
+            dt = parse_db_date(user['vip_until'])
             formatted_date = dt.strftime("%Y-%m-%d %H:%M")
             remaining_days = (dt - datetime.now(timezone.utc)).days
             if remaining_days < 0: remaining_days = 0
@@ -206,12 +207,10 @@ async def help_command(message: Message, state: FSMContext):
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     
     if user.get('banned_support_until'):
+        from core.utils import parse_db_date
         import datetime
         try:
-            ban_date_str = user['banned_support_until'].replace(' ', 'T')
-            ban_until_dt = datetime.datetime.fromisoformat(ban_date_str)
-            if ban_until_dt.tzinfo is None:
-                ban_until_dt = ban_until_dt.replace(tzinfo=datetime.timezone.utc)
+            ban_until_dt = parse_db_date(user['banned_support_until'])
             now_dt = datetime.datetime.now(datetime.timezone.utc)
             if now_dt < ban_until_dt:
                 formatted_date = ban_until_dt.strftime("%Y-%m-%d %H:%M")
@@ -250,12 +249,10 @@ async def process_support_message(message: Message, state: FSMContext, bot: Bot)
         return
 
     if user.get('banned_support_until'):
+        from core.utils import parse_db_date
         import datetime
         try:
-            ban_date_str = user['banned_support_until'].replace(' ', 'T')
-            ban_until_dt = datetime.datetime.fromisoformat(ban_date_str)
-            if ban_until_dt.tzinfo is None:
-                ban_until_dt = ban_until_dt.replace(tzinfo=datetime.timezone.utc)
+            ban_until_dt = parse_db_date(user['banned_support_until'])
             now_dt = datetime.datetime.now(datetime.timezone.utc)
             if now_dt < ban_until_dt:
                 formatted_date = ban_until_dt.strftime("%Y-%m-%d %H:%M")

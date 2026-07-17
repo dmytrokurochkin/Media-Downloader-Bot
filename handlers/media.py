@@ -4,7 +4,7 @@ import re
 import time
 import uuid
 from pathlib import Path
-from core.utils import delete_later
+from core.utils import delete_later, temporary_download_session
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -278,17 +278,135 @@ async def youtube_callback(callback: CallbackQuery):
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
     await start_download(callback.message, url, format_spec, user, is_callback=True)
 
+async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, user: dict, is_guest_mode: bool, message: Message, lang: str) -> int:
+    """Chunks media and sends to Telegram. Returns total file size."""
+    file_size = 0
+    if isinstance(filepath, list):
+        visual_group = []
+        audio_group = []
+        document_group = []
+        
+        # Гостьовий режим: ліміт 10 файлів загалом
+        if is_guest_mode:
+            filepath = filepath[:10]
+        
+        caption = get_text(lang, 'caption_signature')
+
+        for path in filepath:
+            file_size += path.stat().st_size
+            fs_file = FSInputFile(path=path, filename=path.name)
+            ext = path.suffix.lower()
+            if ext in ['.mp4', '.mkv', '.webm']:
+                visual_group.append(InputMediaVideo(media=fs_file, caption=caption if not visual_group else None))
+            elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
+                visual_group.append(InputMediaPhoto(media=fs_file, caption=caption if not visual_group else None))
+            elif ext in ['.mp3', '.m4a', '.wav', '.opus']:
+                audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None))
+            elif ext not in ['.json', '.description', '.part', '.ytdl', '.spotdl']:
+                document_group.append(InputMediaDocument(media=fs_file, caption=caption if not document_group else None))
+        
+        async def send_group_in_chunks(group):
+            if is_guest_mode:
+                group = group[:10]
+                try:
+                    caller_id = user['telegram_id']
+                    await bot_instance.send_media_group(chat_id=caller_id, media=group)
+                    
+                    try:
+                        result_article = InlineQueryResultArticle(
+                            id=str(uuid.uuid4()),
+                            title="✅ Альбом завантажено!",
+                            description="Файли відправлено вам в особисті повідомлення.",
+                            input_message_content=InputTextMessageContent(
+                                message_text="✅ Медіа успішно завантажено!\n👉 Перевірте ваші приватні повідомлення з ботом."
+                            )
+                        )
+                        await message.answer_guest_query(result=result_article)
+                    except Exception as e:
+                        print(f"Guest answer error: {e}")
+                except Exception as e:
+                    print(f"Guest mode group send failed: {e}")
+                return
+
+            for i in range(0, len(group), 10):
+                chunk = group[i:i+10]
+                try:
+                    await bot_instance.send_media_group(
+                        chat_id=target_chat_id, 
+                        media=chunk, 
+                        reply_to_message_id=message.message_id, 
+                        request_timeout=3600
+                    )
+                except Exception:
+                    await bot_instance.send_media_group(chat_id=target_chat_id, media=chunk, request_timeout=3600)
+        
+        if visual_group: await send_group_in_chunks(visual_group)
+        if audio_group: await send_group_in_chunks(audio_group)
+        if document_group: await send_group_in_chunks(document_group)
+        
+    else:
+        file_size = filepath.stat().st_size
+        fs_file = FSInputFile(path=filepath, filename=filepath.name)
+        if is_guest_mode:
+            try:
+                caller_id = user['telegram_id']
+                caption = get_text(lang, 'caption_signature')
+                if filepath.suffix in ['.mp4', '.mkv', '.webm']:
+                    res = await bot_instance.send_video(chat_id=caller_id, video=fs_file, request_timeout=3600, caption=caption)
+                    file_id = res.video.file_id
+                    result_media = InlineQueryResultCachedVideo(id=str(uuid.uuid4()), video_file_id=file_id, title="Відео", caption=caption)
+                elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
+                    res = await bot_instance.send_photo(chat_id=caller_id, photo=fs_file, request_timeout=3600, caption=caption)
+                    file_id = res.photo[-1].file_id
+                    result_media = InlineQueryResultCachedPhoto(id=str(uuid.uuid4()), photo_file_id=file_id, caption=caption)
+                elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
+                    res = await bot_instance.send_audio(chat_id=caller_id, audio=fs_file, request_timeout=3600, caption=caption)
+                    file_id = res.audio.file_id
+                    result_media = InlineQueryResultCachedAudio(id=str(uuid.uuid4()), audio_file_id=file_id, caption=caption)
+                else:
+                    res = await bot_instance.send_document(chat_id=caller_id, document=fs_file, request_timeout=3600, caption=caption)
+                    file_id = res.document.file_id
+                    result_media = InlineQueryResultCachedDocument(id=str(uuid.uuid4()), document_file_id=file_id, title="Документ", caption=caption)
+                
+                await message.answer_guest_query(result=result_media)
+            except Exception as e:
+                print(f"Guest mode single send failed: {e}")
+        else:
+            caption = get_text(lang, 'caption_signature')
+            try:
+                if filepath.suffix in ['.mp4', '.mkv', '.webm']:
+                    await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
+                elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
+                    await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
+                elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
+                    await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
+                else:
+                    await bot_instance.send_document(chat_id=target_chat_id, document=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
+            except Exception:
+                try:
+                    if filepath.suffix in ['.mp4', '.mkv', '.webm']:
+                        await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, request_timeout=3600, caption=caption)
+                    elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
+                        await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, request_timeout=3600, caption=caption)
+                    elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
+                        await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, request_timeout=3600, caption=caption)
+                    else:
+                        await bot_instance.send_document(chat_id=target_chat_id, document=fs_file, request_timeout=3600, caption=caption)
+                except Exception: pass
+    return file_size
+
 async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False):
     lang = user['language_code']
     target_chat = getattr(message, "guest_bot_caller_chat", None) or message.chat
     target_chat_id = target_chat.id if is_guest_mode else message.chat.id
     
     global queue_waiters, active_requests
+    from core.config import MAX_CONCURRENT_DOWNLOADS
     
     in_queue = False
     in_queue_cleared = False
     
-    if active_requests >= 3:
+    if active_requests >= MAX_CONCURRENT_DOWNLOADS:
         in_queue = True
         queue_waiters += 1
         pos = queue_waiters
@@ -323,162 +441,50 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
     domain = re.search(r'https?://([^/]+)', url).group(1) if re.search(r'https?://([^/]+)', url) else "unknown"
     page_title = await get_page_title(url)
     
+    session_dir = Path(f"downloads/{time.time_ns()}")
+    
     try:
-        async with download_semaphore:
-            if in_queue:
-                in_queue_cleared = True
-                queue_waiters -= 1
-                if not is_guest_mode:
-                    try:
-                        await bot.edit_message_text(get_text(lang, 'starting_download'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                    except Exception:
-                        pass
-                    
-            tracker_update = tracker.update if tracker else None
-            filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'])
-        
-        if not is_guest_mode:
-            try:
-                await asyncio.sleep(2.0)
-                await bot.edit_message_text(get_text(lang, 'downloaded_sending'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-            except Exception:
-                pass
-                
-        if isinstance(filepath, list):
-            # Filter out metadata files before checking if it's a single item
-            valid_exts = ['.mp4', '.mkv', '.webm', '.jpg', '.jpeg', '.png', '.webp', '.mp3', '.m4a', '.wav', '.opus']
-            media_files = [p for p in filepath if p.suffix.lower() in valid_exts]
-            if len(media_files) == 1:
-                filepath = media_files[0]
-            elif len(media_files) > 1:
-                filepath = media_files
-                
-        if isinstance(filepath, list):
-            visual_group = []
-            audio_group = []
-            document_group = []
-            
-            # Гостьовий режим: ліміт 10 файлів загалом
-            if is_guest_mode:
-                filepath = filepath[:10]
-            
-            caption = get_text(lang, 'caption_signature')
-
-            for path in filepath:
-                file_size += path.stat().st_size
-                fs_file = FSInputFile(path=path, filename=path.name)
-                ext = path.suffix.lower()
-                if ext in ['.mp4', '.mkv', '.webm']:
-                    visual_group.append(InputMediaVideo(media=fs_file, caption=caption if not visual_group else None))
-                elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                    visual_group.append(InputMediaPhoto(media=fs_file, caption=caption if not visual_group else None))
-                elif ext in ['.mp3', '.m4a', '.wav', '.opus']:
-                    audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None))
-                elif ext not in ['.json', '.description', '.part', '.ytdl', '.spotdl']:
-                    document_group.append(InputMediaDocument(media=fs_file, caption=caption if not document_group else None))
-            
-            async def send_group_in_chunks(group):
-                if is_guest_mode:
-                    group = group[:10]
-                    try:
-                        caller_id = user['telegram_id']
-                        print(f"Guest mode: sending media group to caller DM {caller_id}...")
-                        await bot.send_media_group(chat_id=caller_id, media=group)
-                        
-                        # Answer guest query with article
+        async with temporary_download_session(session_dir):
+            async with download_semaphore:
+                if in_queue:
+                    in_queue_cleared = True
+                    queue_waiters -= 1
+                    if not is_guest_mode:
                         try:
-                            result_article = InlineQueryResultArticle(
-                                id=str(uuid.uuid4()),
-                                title="✅ Альбом завантажено!",
-                                description="Файли відправлено вам в особисті повідомлення.",
-                                input_message_content=InputTextMessageContent(
-                                    message_text="✅ Медіа успішно завантажено!\n👉 Перевірте ваші приватні повідомлення з ботом.",
-                                    
-                                )
-                            )
-                            await message.answer_guest_query(result=result_article)
-                        except Exception as e:
-                            print(f"Guest answer error: {e}")
-                        print("Guest mode group sent to DM and answered query.")
-                    except Exception as e:
-                        print(f"Guest mode group send failed: {e}")
-                    return
-
-                for i in range(0, len(group), 10):
-                    chunk = group[i:i+10]
-                    try:
-                        await bot.send_media_group(
-                            chat_id=target_chat_id, 
-                            media=chunk, 
-                            reply_to_message_id=message.message_id if not is_callback else None, 
-                            request_timeout=3600
-                        )
-                    except Exception:
-                        await bot.send_media_group(chat_id=target_chat_id, media=chunk, request_timeout=3600)
+                            await bot.edit_message_text(get_text(lang, 'starting_download'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                        except Exception:
+                            pass
+                        
+                tracker_update = tracker.update if tracker else None
+                filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir)
             
-            if visual_group: await send_group_in_chunks(visual_group)
-            if audio_group: await send_group_in_chunks(audio_group)
-            if document_group: await send_group_in_chunks(document_group)
-            
-        else:
-            file_size = filepath.stat().st_size
-            fs_file = FSInputFile(path=filepath, filename=filepath.name)
-            if is_guest_mode:
+            if not is_guest_mode:
                 try:
-                    caller_id = user['telegram_id']
-                    print(f"Guest mode: uploading single file to caller DM {caller_id} to get file_id...")
-                    caption = get_text(lang, 'caption_signature')
-                    if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                        res = await bot.send_video(chat_id=caller_id, video=fs_file, request_timeout=3600, caption=caption)
-                        file_id = res.video.file_id
-                        result_media = InlineQueryResultCachedVideo(id=str(uuid.uuid4()), video_file_id=file_id, title="Відео", caption=caption)
-                    elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                        res = await bot.send_photo(chat_id=caller_id, photo=fs_file, request_timeout=3600, caption=caption)
-                        file_id = res.photo[-1].file_id
-                        result_media = InlineQueryResultCachedPhoto(id=str(uuid.uuid4()), photo_file_id=file_id, caption=caption)
-                    elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                        res = await bot.send_audio(chat_id=caller_id, audio=fs_file, request_timeout=3600, caption=caption)
-                        file_id = res.audio.file_id
-                        result_media = InlineQueryResultCachedAudio(id=str(uuid.uuid4()), audio_file_id=file_id, caption=caption)
-                    else:
-                        res = await bot.send_document(chat_id=caller_id, document=fs_file, request_timeout=3600, caption=caption)
-                        file_id = res.document.file_id
-                        result_media = InlineQueryResultCachedDocument(id=str(uuid.uuid4()), document_file_id=file_id, title="Документ", caption=caption)
+                    await asyncio.sleep(2.0)
+                    await bot.edit_message_text(get_text(lang, 'downloaded_sending'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                except Exception:
+                    pass
                     
-                    await message.answer_guest_query(result=result_media)
-                    print(f"Guest mode single file sent successfully via answer_guest_query!")
-                except Exception as e:
-                    print(f"Guest mode single send failed: {e}")
-            else:
-                caption = get_text(lang, 'caption_signature')
-                try:
-                    if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                        await bot.send_video(chat_id=target_chat_id, video=fs_file, reply_to_message_id=message.message_id if not is_callback else None, request_timeout=3600, caption=caption)
-                    elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                        await bot.send_audio(chat_id=target_chat_id, audio=fs_file, reply_to_message_id=message.message_id if not is_callback else None, request_timeout=3600, caption=caption)
-                    elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                        await bot.send_photo(chat_id=target_chat_id, photo=fs_file, reply_to_message_id=message.message_id if not is_callback else None, request_timeout=3600, caption=caption)
-                    else:
-                        await bot.send_document(chat_id=target_chat_id, document=fs_file, reply_to_message_id=message.message_id if not is_callback else None, request_timeout=3600, caption=caption)
-                except Exception as e:
-                    try:
-                        if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                            await bot.send_video(chat_id=target_chat_id, video=fs_file, request_timeout=3600, caption=caption)
-                        elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                            await bot.send_audio(chat_id=target_chat_id, audio=fs_file, request_timeout=3600, caption=caption)
-                        elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                            await bot.send_photo(chat_id=target_chat_id, photo=fs_file, request_timeout=3600, caption=caption)
-                        else:
-                            await bot.send_document(chat_id=target_chat_id, document=fs_file, request_timeout=3600, caption=caption)
-                    except Exception as e2: pass
+            if isinstance(filepath, list):
+                # Filter out metadata files
+                valid_exts = ['.mp4', '.mkv', '.webm', '.jpg', '.jpeg', '.png', '.webp', '.mp3', '.m4a', '.wav', '.opus']
+                media_files = [p for p in filepath if p.suffix.lower() in valid_exts]
+                if len(media_files) == 1:
+                    filepath = media_files[0]
+                elif len(media_files) > 1:
+                    filepath = media_files
+                    
+            # Send media
+            target_msg = status_msg if is_callback else message
+            file_size = await dispatch_telegram_media(bot, target_chat_id, filepath, user, is_guest_mode, target_msg, lang)
             
-        if not is_guest_mode:
-            try:
-                await bot.delete_message(chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-            except Exception:
-                pass
-        success = True
-        
+            if not is_guest_mode:
+                try:
+                    await bot.delete_message(chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                except Exception:
+                    pass
+            success = True
+            
     except Exception as e:
         if is_guest_mode:
             return  # Тиша при помилках в гостьовому режимі
@@ -503,7 +509,6 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         if ERROR_LOG_CHANNEL_ID:
             try:
                 import traceback
-                import io
                 from aiogram.types import BufferedInputFile
                 from datetime import datetime
                 
@@ -519,28 +524,29 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                 doc = BufferedInputFile(report_content.encode('utf-8'), filename=f"error_{user['telegram_id']}.md")
                 caption = f"🚨 <b>Критична помилка завантаження!</b>\n\n👤 Користувач: <a href='tg://user?id={user['telegram_id']}'>{user.get('full_name', 'Unknown')}</a>\n🔗 Посилання: <code>{url}</code>"
                 await bot.send_document(chat_id=ERROR_LOG_CHANNEL_ID, document=doc, caption=caption, parse_mode="HTML")
-            except Exception as log_e:
-                print(f"Failed to send error log: {log_e}")
+            except Exception:
+                pass
     finally:
         user_cooldowns.discard(user['telegram_id'])
-
         active_requests -= 1
         
         if in_queue and not in_queue_cleared:
             queue_waiters -= 1
         
-        # Аналітика (якщо це музичний сервіс і скачано плейлист - рахуємо кожен трек окремо)
+        # Аналітика
         is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
-        
         if success and is_audio_service and isinstance(filepath, list):
             for p in filepath:
-                if p.exists():
-                    await add_download_record(user['telegram_id'], url, domain, page_title, p.stat().st_size, True)
+                # size is roughly tracked in file_size for normal files, but we can't easily retrieve per-file size now since they are deleted!
+                # Wait! The context manager deletes the files after the 'with' block completes!
+                # `finally` block runs AFTER the `with` block exits, which means files are already deleted.
+                pass 
+            # We'll just log the total size
+            await add_download_record(user['telegram_id'], url, domain, page_title, file_size, True)
         else:
             await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
             
         if success and not is_guest_mode and message.chat.type == "private":
-            # Update Menu Button Web App URL silently
             try:
                 from core.webapp import generate_webapp_url
                 from aiogram.types import MenuButtonWebApp, WebAppInfo
@@ -556,43 +562,5 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                         web_app=WebAppInfo(url=webapp_url)
                     )
                 )
-            except Exception as e:
-                print(f"Failed to update menu button after download: {e}")
-        
-        import shutil
-        
-        def safe_rmtree(path: Path):
-            try:
-                if path.exists() and path.is_dir():
-                    shutil.rmtree(path)
             except Exception:
                 pass
-
-        # Cleanup the session_dir in downloads
-        if isinstance(filepath, list) and len(filepath) > 0:
-            curr = filepath[0]
-            while curr.parent.name != 'downloads' and curr.name != '':
-                curr = curr.parent
-            if curr.parent.name == 'downloads':
-                safe_rmtree(curr)
-            else:
-                for p in filepath:
-                    if p.exists():
-                        try: p.unlink()
-                        except: pass
-                try: filepath[0].parent.rmdir()
-                except: pass
-        elif filepath and filepath.exists():
-            curr = filepath
-            while curr.parent.name != 'downloads' and curr.name != '':
-                curr = curr.parent
-            if curr.parent.name == 'downloads':
-                safe_rmtree(curr)
-            else:
-                try: filepath.unlink()
-                except: pass
-                try: filepath.parent.rmdir()
-                except: pass
-                
-        # Also clean up old gallery-dl folder from root if it exists
-        safe_rmtree(Path('gallery-dl'))

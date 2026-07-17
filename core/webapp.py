@@ -54,11 +54,9 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     vip_until = user.get('vip_until')
     vu_ts = 0
     if vip_until:
+        from core.utils import parse_db_date
         try:
-            dt = datetime.datetime.fromisoformat(vip_until.replace(' ', 'T'))
-            # Ensure it has a timezone to convert to timestamp correctly
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=datetime.timezone.utc)
+            dt = parse_db_date(vip_until)
             vu_ts = int(dt.timestamp())
         except Exception:
             pass

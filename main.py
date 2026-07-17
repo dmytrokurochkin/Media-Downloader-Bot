@@ -6,7 +6,7 @@ from aiogram import F
 
 from core.config import BOT_TOKEN
 from core.loader import bot, dp
-from database import init_db
+from database import init_db, init_db_connection, close_db_connection
 from handlers.user import user_router
 from handlers.admin import admin_router
 from handlers.payment import payment_router
@@ -17,10 +17,14 @@ from middlewares.throttling import ThrottlingMiddleware
 logging.basicConfig(level=logging.INFO)
 
 async def main():
+    await init_db_connection()
     await init_db()
     
+    dp.shutdown.register(close_db_connection)
+    
+    from core.config import MAX_CONCURRENT_DOWNLOADS
     import handlers.media
-    handlers.media.download_semaphore = asyncio.Semaphore(3)
+    handlers.media.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
     
     # Підключення роутерів
     dp.include_router(user_router)

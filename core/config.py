@@ -25,10 +25,11 @@ DB_PATH = Path("database.db")
 TIER_LIMITS = {
     'free': {'daily': 25, 'playlist': 10, 'size': 50 * 1024 * 1024},
     'pro': {'daily': 100, 'playlist': 30, 'size': 500 * 1024 * 1024},
-    'max': {'daily': 999999, 'playlist': 9999, 'size': 2000 * 1024 * 1024}
+    'max': {'daily': 1000, 'playlist': 100, 'size': 2000 * 1024 * 1024}
 }
 
 MAX_ACTIVE_REQUESTS = 15
+MAX_CONCURRENT_DOWNLOADS = 3
 
 # Regular Expressions
 URL_PATTERN = re.compile(r'https?://[^\s]+')
@@ -43,3 +44,6 @@ VIP_TARIFFS = {
     'max_30d': {'tier': 'max', 'days': 30, 'stars': 600},
     'max_365d': {'tier': 'max', 'days': 365, 'stars': 5000}
 }
+
+# Paths
+FFMPEG_WIN_PATH = "C:\\Users\\MrMozozavr\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_m18.22.422\\ffmpeg-7.1-full_build-shared\\bin\\ffmpeg.exe"

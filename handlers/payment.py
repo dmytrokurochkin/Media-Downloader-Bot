@@ -137,9 +137,9 @@ async def successful_payment_handler(message: Message):
         if tariff:
             new_date = await grant_vip(user_id, tariff['days'], tier=tariff['tier'])
             
-            from datetime import datetime
+            from core.utils import parse_db_date
             try:
-                dt = datetime.fromisoformat(new_date.replace(' ', 'T'))
+                dt = parse_db_date(new_date)
                 formatted_date = dt.strftime("%Y-%m-%d %H:%M")
             except Exception:
                 formatted_date = new_date

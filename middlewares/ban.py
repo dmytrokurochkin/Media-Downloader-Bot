@@ -31,11 +31,9 @@ class BanCheckMiddleware(BaseMiddleware):
             
             # Check bot ban
             if db_user.get('banned_bot_until'):
+                from core.utils import parse_db_date
                 try:
-                    ban_date_str = db_user['banned_bot_until'].replace(' ', 'T')
-                    ban_until_dt = datetime.datetime.fromisoformat(ban_date_str)
-                    if ban_until_dt.tzinfo is None:
-                        ban_until_dt = ban_until_dt.replace(tzinfo=datetime.timezone.utc)
+                    ban_until_dt = parse_db_date(db_user['banned_bot_until'])
                         
                     now_dt = datetime.datetime.now(datetime.timezone.utc)
                     if now_dt < ban_until_dt:

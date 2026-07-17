@@ -194,7 +194,8 @@ async def process_give_vip(message: Message, state: FSMContext):
             
         new_date = await grant_vip(target_id, days, tier=tier)
         try:
-            dt = datetime.fromisoformat(new_date.replace(' ', 'T'))
+            from core.utils import parse_db_date
+            dt = parse_db_date(new_date)
             formatted_date = dt.strftime("%Y-%m-%d %H:%M")
         except Exception:
             formatted_date = new_date
@@ -258,7 +259,8 @@ async def process_ban_bot(message: Message, state: FSMContext):
         
         ban_until_iso = await ban_user_bot(target_id, days)
         try:
-            dt = datetime.fromisoformat(ban_until_iso.replace(' ', 'T'))
+            from core.utils import parse_db_date
+            dt = parse_db_date(ban_until_iso)
             formatted_date = dt.strftime("%Y-%m-%d %H:%M")
             if dt.year == 9999:
                 formatted_date = "Назавжди"
@@ -290,7 +292,8 @@ async def process_ban_support(message: Message, state: FSMContext):
         
         ban_until_iso = await ban_user_support(target_id, days)
         try:
-            dt = datetime.fromisoformat(ban_until_iso.replace(' ', 'T'))
+            from core.utils import parse_db_date
+            dt = parse_db_date(ban_until_iso)
             formatted_date = dt.strftime("%Y-%m-%d %H:%M")
             if dt.year == 9999:
                 formatted_date = "Назавжди"

@@ -56,9 +56,10 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
                 "--audio", "youtube-music", "youtube",
                 "--log-level", "ERROR"
             ]
+            from core.config import FFMPEG_WIN_PATH
             import os
             from pathlib import Path
-            ffmpeg_winget = Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'ffmpeg-8.1.2-full_build' / 'bin' / 'ffmpeg.exe'
+            ffmpeg_winget = Path(FFMPEG_WIN_PATH)
             if ffmpeg_winget.exists():
                 cmd.extend(["--ffmpeg", str(ffmpeg_winget)])
                 
@@ -180,8 +181,9 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         
     opts['match_filter'] = check_size
     
+    from core.config import FFMPEG_WIN_PATH
     import os
-    ffmpeg_winget = Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft' / 'WinGet' / 'Packages' / 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe' / 'ffmpeg-8.1.2-full_build' / 'bin' / 'ffmpeg.exe'
+    ffmpeg_winget = Path(FFMPEG_WIN_PATH)
     if ffmpeg_winget.exists():
         opts['ffmpeg_location'] = str(ffmpeg_winget)
     
@@ -446,13 +448,14 @@ async def download_threads_native(url: str, session_dir: Path, progress_callback
     downloaded.sort()
     return downloaded
 
-async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None, tier: str = 'free') -> Union[Path, List[Path]]:
+async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None, tier: str = 'free', session_dir: Path = None) -> Union[Path, List[Path]]:
     """
     Головна асинхронна функція для завантаження медіа.
     """
     loop = asyncio.get_running_loop()
-    session_dir = Path(f"downloads/{time.time_ns()}")
-    session_dir.mkdir(parents=True, exist_ok=True)
+    if session_dir is None:
+        session_dir = Path(f"downloads/{time.time_ns()}")
+        session_dir.mkdir(parents=True, exist_ok=True)
     
     # Перенаправляємо Instagram на gallery-dl
     if 'instagram.com' in url:
