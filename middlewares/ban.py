@@ -9,6 +9,10 @@ import datetime
 BANNED_NOTIFIED_CACHE = {}
 BAN_NOTIFICATION_COOLDOWN = datetime.timedelta(hours=1) # 1 година кулдауну
 
+# Кеш для зменшення навантаження на БД при оновленні last_active_at
+LAST_ACTIVE_CACHE = {}
+ACTIVE_UPDATE_COOLDOWN = datetime.timedelta(minutes=5)
+
 class BanCheckMiddleware(BaseMiddleware):
     async def __call__(
         self,
@@ -29,8 +33,13 @@ class BanCheckMiddleware(BaseMiddleware):
             username = user.username if user.username else ""
             db_user = await get_or_create_user(user.id, username, full_name)
             
-            # Update user's last activity timestamp
-            await update_last_active(user.id)
+            now_dt = datetime.datetime.now(datetime.timezone.utc)
+            
+            # Update user's last activity timestamp (із захистом від спаму запитів у БД)
+            last_active = LAST_ACTIVE_CACHE.get(user.id)
+            if not last_active or (now_dt - last_active) > ACTIVE_UPDATE_COOLDOWN:
+                await update_last_active(user.id)
+                LAST_ACTIVE_CACHE[user.id] = now_dt
             
             # Check bot ban
             if db_user.get('banned_bot_until'):
@@ -38,7 +47,6 @@ class BanCheckMiddleware(BaseMiddleware):
                 try:
                     ban_until_dt = parse_db_date(db_user['banned_bot_until'])
                         
-                    now_dt = datetime.datetime.now(datetime.timezone.utc)
                     if now_dt < ban_until_dt:
                         # User is banned.
                         # Stop propagation, but only notify if cooldown has passed

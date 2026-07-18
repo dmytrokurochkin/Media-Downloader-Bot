@@ -443,27 +443,43 @@ async def get_user_stats(telegram_id: int) -> Optional[dict]:
     
     return profile
 
+import time
+_ad_cache = {"text": None, "timestamp": 0}
+CACHE_TTL = 300 # 5 хвилин кешу для реклами
+
 async def get_active_ad() -> Optional[str]:
-    """Повертає текст активної рекламної кампанії, або None."""
+    """Повертає текст активної рекламної кампанії з використанням In-Memory кешу."""
+    global _ad_cache
+    now = time.time()
+    
+    # Повертаємо з кешу, якщо TTL ще не вийшов
+    if now - _ad_cache["timestamp"] < CACHE_TTL:
+        return _ad_cache["text"]
+        
     global _db_connection
     async with _db_connection.execute('SELECT ad_text FROM ad_campaigns WHERE is_active = 1 LIMIT 1') as cursor:
         row = await cursor.fetchone()
-        if row:
-            return row['ad_text']
-    return None
+        
+    _ad_cache["text"] = row['ad_text'] if row else None
+    _ad_cache["timestamp"] = now
+    return _ad_cache["text"]
 
 async def set_active_ad(ad_text: str):
     """Робить всі існуючі кампанії неактивними і додає нову активну."""
-    global _db_connection
+    global _db_connection, _ad_cache
     await _db_connection.execute('UPDATE ad_campaigns SET is_active = 0')
     await _db_connection.execute('INSERT INTO ad_campaigns (ad_text, is_active) VALUES (?, 1)', (ad_text,))
     await _db_connection.commit()
+    # Інвалідація кешу
+    _ad_cache["timestamp"] = 0
 
 async def clear_active_ads():
     """Вимкнути всі рекламні кампанії."""
-    global _db_connection
+    global _db_connection, _ad_cache
     await _db_connection.execute('UPDATE ad_campaigns SET is_active = 0')
     await _db_connection.commit()
+    # Інвалідація кешу
+    _ad_cache["timestamp"] = 0
 
 async def update_last_active(telegram_id: int):
     """Оновлює час останньої активності користувача"""
