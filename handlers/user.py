@@ -5,10 +5,10 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings
+from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings, get_user_stats
 from locales import get_text
 import json
-from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard
+from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard, get_onboarding_keyboard
 from keyboards.reply import get_main_keyboard
 from core.config import TIER_LIMITS, ADMIN_IDS
 import asyncio
@@ -38,6 +38,8 @@ async def start_handler(message: Message, state: FSMContext):
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     
+    stats = await get_user_stats(user['telegram_id'])
+    
     # Generate Web App URL
     bot_info = await bot.get_me()
     daily_count = await get_daily_download_count(message.from_user.id)
@@ -52,12 +54,47 @@ async def start_handler(message: Message, state: FSMContext):
             )
         except Exception as e:
             print("Failed to set menu button:", e)
-        reply_markup = get_main_keyboard(user['language_code'], webapp_url)
+            
+    is_new_user = (stats and stats.get('downloads_count', 0) == 0)
+    
+    if is_new_user:
+        msg = await message.reply(get_text(user['language_code'], 'onboarding_greeting'), reply_markup=get_onboarding_keyboard(user['language_code']))
     else:
-        reply_markup = get_main_keyboard(user['language_code'], None)
+        if message.chat.type == "private":
+            reply_markup = get_main_keyboard(user['language_code'], webapp_url)
+        else:
+            reply_markup = get_main_keyboard(user['language_code'], None)
+            
+        msg = await message.reply(get_text(user['language_code'], 'start'), reply_markup=reply_markup)
         
-    msg = await message.reply(get_text(user['language_code'], 'start'), reply_markup=reply_markup)
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+@user_router.callback_query(F.data == "onboarding_test_dl")
+async def onboarding_test_dl_handler(callback: CallbackQuery, state: FSMContext):
+    user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+    
+    await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
+    
+    from handlers.media import start_download
+    test_url = "https://www.youtube.com/shorts/xcJtL7QggTI"
+    format_spec = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
+    
+    try:
+        await start_download(callback.message, test_url, format_spec, user, is_callback=True)
+    except Exception as e:
+        print(f"Error in onboarding test download: {e}")
+        
+    bot_info = await bot.get_me()
+    daily_count = await get_daily_download_count(user['telegram_id'])
+    webapp_url = await generate_webapp_url(user, daily_count, bot_info.username)
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text=get_text(user['language_code'], 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+    
+    msg = await callback.message.answer(get_text(user['language_code'], 'onboarding_success'), reply_markup=builder.as_markup())
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 120))
 
 # Helper to check if text matches a key in any language
 def text_matches(key):

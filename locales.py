@@ -3,6 +3,9 @@ from core.config import BOT_USERNAME
 LOCALES = {
     "uk": {
         "start": "👋 <b>Привіт! Я твій особистий швидкий завантажувач медіа!</b>\n\nЯ вмію завантажувати фото, відео та аудіо з найпопулярніших платформ: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook та GitHub</b>.\n\n👇 Просто надішли мені посилання на відео чи пост, або скористайся кнопками меню нижче для налаштувань та додаткової інформації!",
+        "onboarding_greeting": "👋 <b>Привіт!</b> Я завантажую медіа з будь-яких соцмереж без водяних знаків.\n\nДавай перевіримо, як це працює!",
+        "btn_test_download": "🚀 Виконати тестове завантаження",
+        "onboarding_success": "🎉 <b>Супер!</b> Ти отримав своє перше відео і розблокував досягнення <b>'Перша кров'</b>.\n\nВідкрий Mini App, щоб переглянути свій профіль та налаштування.",
         "download_usage": "Використання: просто надішліть посилання.",
         "choose_yt_quality": "🎬 <b>Оберіть якість відео:</b>\n🔗 {url}",
         "in_queue": "⏳ <i>Зачекайте трохи, ви в черзі... Ваша позиція: {pos}</i>",
@@ -102,7 +105,10 @@ LOCALES = {
         "too_fast": "⚠️ Занадто швидко!",
     },
     "en": {
-        "start": "👋 <b>Hello! I'm your fast personal media downloader!</b>\n\nI can download photos, videos, and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook, and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and additional information!",
+        "start": "👋 <b>Hello! I am your personal fast media downloader!</b>\n\nI can download photos, videos and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and more info!",
+        "onboarding_greeting": "👋 <b>Hello!</b> I download media from any social network without watermarks.\n\nLet's check how it works!",
+        "btn_test_download": "🚀 Perform a test download",
+        "onboarding_success": "🎉 <b>Awesome!</b> You got your first video and unlocked the <b>'First Blood'</b> achievement.\n\nOpen the Mini App to view your profile and settings.",
         "download_usage": "Usage: just send a link.",
         "choose_yt_quality": "🎬 <b>Select video quality:</b>\n🔗 {url}",
         "in_queue": "⏳ <i>Please wait, you are in the queue... Your position: {pos}</i>",
@@ -157,7 +163,6 @@ LOCALES = {
         "btn_change_lang": "🌐 Change Language",
         "btn_guest_quality": "🎥 Quality (Guest)",
         "guest_quality_text": "🎥 <b>YouTube quality in guest mode:</b>\n<i>Select the default quality for downloading YouTube videos when calling the bot in groups or private chats via inline mode.</i>",
-
         "banned_bot": "⛔️ <b>Access Denied</b>\n\nYour account has been blocked by the administration. You can no longer use the bot.\nBan expires: {until}",
         "banned_support": "⛔️ <b>Support Restricted</b>\n\nYou have been temporarily restricted from contacting support. You cannot send messages.\nRestriction expires: {until}",
         "admin_user_banned_bot": "✅ User {user_id} banned from bot until {until}.",
@@ -202,7 +207,10 @@ LOCALES = {
         "too_fast": "⚠️ Too fast!",
     },
     "pl": {
-        "start": "👋 <b>Cześć! Jestem twoim szybkim osobistym narzędziem do pobierania!</b>\n\nMogę pobierać zdjęcia, filmy i pliki audio z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej!",
+        "start": "👋 <b>Cześć! Jestem twoim osobistym szybkim downloaderem multimediów!</b>\n\nPotrafię pobierać zdjęcia, filmy i dźwięk z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej, aby uzyskać ustawienia i więcej informacji!",
+        "onboarding_greeting": "👋 <b>Cześć!</b> Pobieram multimedia z dowolnej sieci społecznościowej bez znaków wodnych.\n\nSprawdźmy, jak to działa!",
+        "btn_test_download": "🚀 Wykonaj pobieranie testowe",
+        "onboarding_success": "🎉 <b>Super!</b> Otrzymałeś swoje pierwsze wideo i odblokowałeś osiągnięcie <b>'Pierwsza krew'</b>.\n\nOtwórz Mini App, aby wyświetlić swój profil i ustawienia.",
         "download_usage": "Użycie: po prostu wyślij link.",
         "choose_yt_quality": "🎬 <b>Wybierz jakość wideo:</b>\n🔗 {url}",
         "in_queue": "⏳ <i>Proszę czekać, jesteś w kolejce... Twoja pozycja: {pos}</i>",

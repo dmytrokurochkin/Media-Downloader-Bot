@@ -2,6 +2,11 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from locales import get_text
 
+def get_onboarding_keyboard(lang: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=get_text(lang, 'btn_test_download'), callback_data="onboarding_test_dl")
+    return builder.as_markup()
+
 def get_youtube_keyboard(url: str, lang: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="1080p", callback_data="yt_1080")
