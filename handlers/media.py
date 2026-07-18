@@ -586,69 +586,19 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                     filepath = media_files
             
             # Watermark integration
-            if user.get('tier') == 'Max' and user.get('watermark_file_id'):
-                from core.watermark import apply_video_watermark, apply_image_watermark
-                watermark_file_id = user['watermark_file_id']
-                watermark_pos = user.get('watermark_position', 'bottom_right')
-                
-                watermark_path = session_dir / f"watermark_{watermark_file_id}.png"
-                try:
-                    await bot.download(watermark_file_id, destination=watermark_path)
-                    
-                    files_to_watermark = filepath if isinstance(filepath, list) else [filepath]
-                    watermarked_files = []
-                    
-                    for f in files_to_watermark:
-                        ext = f.suffix.lower()
-                        if ext in ['.mp4', '.mkv', '.webm']:
-                            out_path = f.with_name(f"wm_{f.name}")
-                            await apply_video_watermark(f, watermark_path, watermark_pos, out_path)
-                            watermarked_files.append(out_path)
-                        elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                            out_path = f.with_name(f"wm_{f.name}")
-                            await apply_image_watermark(f, watermark_path, watermark_pos, out_path)
-                            watermarked_files.append(out_path)
-                        else:
-                            watermarked_files.append(f)
-                            
-                    if isinstance(filepath, list):
-                        filepath = watermarked_files
-                    else:
-                        filepath = watermarked_files[0]
-                except Exception as wm_e:
-                    print(f"Watermark error: {wm_e}")
-                    
+            from core.media_processor import process_watermarks
+            filepath = await process_watermarks(filepath, user, bot, session_dir)
+            
             # Audio Tags Editor integration
             audio_title, audio_performer = None, None
             if state:
                 state_data = await state.get_data()
                 if state_data.get('edit_tags'):
-                    from downloader import apply_audio_metadata
                     audio_title = state_data.get('title')
                     audio_performer = state_data.get('artist')
-                    audio_album = state_data.get('album')
-                    cover_path_str = state_data.get('cover_path')
-                    cover_path = Path(cover_path_str) if cover_path_str else None
-                    
-                    files_to_tag = filepath if isinstance(filepath, list) else [filepath]
-                    tagged_files = []
-                    
-                    for f in files_to_tag:
-                        ext = f.suffix.lower()
-                        if ext in ['.mp3', '.m4a', '.wav', '.opus', '.flac']:
-                            out_path = f.with_name(f"tagged_{f.name}")
-                            await apply_audio_metadata(f, out_path, audio_title, audio_performer, audio_album, cover_path)
-                            tagged_files.append(out_path)
-                        else:
-                            tagged_files.append(f)
-                            
-                    filepath = tagged_files if isinstance(filepath, list) else tagged_files[0]
+                    from core.audio_tags import process_audio_tags
+                    filepath = await process_audio_tags(filepath, state_data)
                     await state.clear()
-                    if cover_path and cover_path.exists():
-                        try:
-                            import shutil
-                            shutil.rmtree(cover_path.parent, ignore_errors=True)
-                        except Exception: pass
                     
             # Send media
             target_msg = status_msg if is_callback else message
@@ -662,58 +612,8 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             success = True
             
     except Exception as e:
-        if is_guest_mode:
-            return  # Тиша при помилках в гостьовому режимі
-            
-        error_msg = str(e)
-        if "SIZE_LIMIT_EXCEEDED" in error_msg:
-            try:
-                await bot.edit_message_text(get_text(lang, 'size_limit_exceeded'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
-            except Exception: pass
-            return
-            
-        if len(error_msg) > 3000:
-            error_msg = error_msg[:3000] + "...\n[Error truncated]"
-            
-        if "unsupported url" in error_msg.lower():
-            try:
-                markup = InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="📄 Зберегти як PDF", callback_data="article_pdf")
-                ]])
-                text = f"⚠️ Не знайдено відео чи аудіо за цим посиланням. Можливо, це текстова стаття? Бажаєте зберегти її як PDF для читання офлайн?\n\n🔗 {url}"
-                await bot.edit_message_text(text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, reply_markup=markup)
-            except Exception:
-                pass
-            return
-            
-        try:
-            await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-            asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
-        except Exception:
-            pass
-            
-        from core.config import ERROR_LOG_CHANNEL_ID
-        if ERROR_LOG_CHANNEL_ID:
-            try:
-                import traceback
-                from aiogram.types import BufferedInputFile
-                from datetime import datetime
-                
-                tb = traceback.format_exc()
-                report_content = f"# Critical Download Error\n\n"
-                report_content += f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                report_content += f"**User ID:** `{user['telegram_id']}`\n"
-                report_content += f"**Username:** @{user.get('username', 'None')}\n"
-                report_content += f"**Name:** {user.get('full_name', 'None')}\n"
-                report_content += f"**URL:** `{url}`\n\n"
-                report_content += f"## Traceback\n```python\n{tb}\n```"
-                
-                doc = BufferedInputFile(report_content.encode('utf-8'), filename=f"error_{user['telegram_id']}.md")
-                caption = f"🚨 <b>Критична помилка завантаження!</b>\n\n👤 Користувач: <a href='tg://user?id={user['telegram_id']}'>{user.get('full_name', 'Unknown')}</a>\n🔗 Посилання: <code>{url}</code>"
-                await bot.send_document(chat_id=ERROR_LOG_CHANNEL_ID, document=doc, caption=caption, parse_mode="HTML")
-            except Exception:
-                pass
+        from core.error_handler import handle_media_error
+        await handle_media_error(e, bot, status_msg, url, user, lang, is_guest_mode)
     finally:
         user_cooldowns.discard(user['telegram_id'])
         active_requests -= 1
