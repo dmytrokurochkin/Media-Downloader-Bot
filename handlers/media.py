@@ -597,3 +597,87 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                 )
             except Exception:
                 pass
+
+async def process_smart_trim(message: Message, user: dict, url: str, start_sec: int, end_sec: int, status_msg: Message):
+    global active_downloads, queue_waiters, active_requests
+    lang = user['language_code']
+    tier = user.get('tier', 'free')
+
+    if active_requests > 100:
+        await bot.edit_message_text(get_text(lang, 'too_many_requests'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        return
+
+    active_requests += 1
+    queue_waiters += 1
+
+    progress = ProgressTracker(status_msg, bot, lang)
+
+    try:
+        from handlers.media import download_semaphore
+        if download_semaphore is None:
+            # Init semaphore if not already
+            import asyncio
+            from core.config import MAX_CONCURRENT_DOWNLOADS
+            from handlers import media
+            media.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+            
+        async with download_semaphore:
+            queue_waiters -= 1
+            active_downloads += 1
+            
+            try:
+                from core.config import BASE_DIR
+                import uuid
+                session_dir = BASE_DIR / "downloads" / f"session_trim_{uuid.uuid4()}"
+                
+                async with temporary_download_session(session_dir):
+                    await progress.update(5)
+                    
+                    from downloader import download_trim_sync
+                    loop = asyncio.get_running_loop()
+                    output_file = await asyncio.to_thread(
+                        download_trim_sync,
+                        url, start_sec, end_sec, session_dir, progress.update, loop
+                    )
+                    
+                    if output_file and output_file.exists():
+                        await progress.update(100)
+                        await bot.edit_message_text("✅ Обрізане відео готове! Завантажую в Telegram...", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                        
+                        file_size = output_file.stat().st_size
+                        
+                        # Upload to Telegram
+                        bot_me = await bot.get_me()
+                        caption = f"✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot_me.username}"
+                        
+                        from aiogram.types import InputMediaVideo, FSInputFile
+                        media = InputMediaVideo(
+                            media=FSInputFile(output_file),
+                            caption=caption,
+                            parse_mode="HTML"
+                        )
+                        
+                        await bot.send_video(chat_id=message.chat.id, video=FSInputFile(output_file), caption=caption, parse_mode="HTML")
+                        
+                        # Add stats
+                        await add_download_record(user['telegram_id'], url, "smart_trim", "", file_size, True)
+                        
+                        try:
+                            await status_msg.delete()
+                        except:
+                            pass
+                    else:
+                        raise Exception("Файл не знайдено після обрізки.")
+                        
+            finally:
+                active_downloads -= 1
+
+    except Exception as e:
+        err_str = str(e)
+        if "Ліміт 30 секунд" in err_str or "size limit" in err_str.lower():
+             await bot.edit_message_text(f"⚠️ Помилка: {err_str}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        else:
+             print(f"Smart trim error: {e}")
+             await bot.edit_message_text(f"❌ Помилка при обрізці відео: {err_str}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+    finally:
+        active_requests -= 1

@@ -501,3 +501,82 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
         except:
             pass
         raise e
+
+def download_trim_sync(url: str, start_sec: int, end_sec: int, session_dir: Path, progress_callback, loop) -> Path:
+    """
+    Завантажує фрагмент відео використовуючи yt-dlp (download_ranges) 
+    або як fallback завантажує все і ріже FFmpeg-ом.
+    """
+    def hook(d):
+        if d['status'] == 'downloading':
+            try:
+                percent_str = d.get('_percent_str', '0%').strip()
+                percent_str = re.sub(r'\x1b\[[0-9;]*m', '', percent_str)
+                percent = float(percent_str.replace('%', ''))
+                if progress_callback and loop:
+                    asyncio.run_coroutine_threadsafe(progress_callback(percent), loop)
+            except Exception:
+                pass
+
+    from core.config import FFMPEG_WIN_PATH
+    import os
+    import subprocess
+    ffmpeg_winget = Path(FFMPEG_WIN_PATH)
+    
+    opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best',
+        'outtmpl': str(session_dir / '%(title).100s_%(id).40s.%(ext)s'),
+        'windowsfilenames': True,
+        'ignoreerrors': False,
+        'quiet': True,
+        'no_warnings': True,
+        'merge_output_format': 'mp4',
+        'progress_hooks': [hook] if progress_callback else [],
+        'download_ranges': yt_dlp.utils.download_range_func(None, [(start_sec, end_sec)]),
+    }
+    
+    if ffmpeg_winget.exists():
+        opts['ffmpeg_location'] = str(ffmpeg_winget)
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+            
+        downloaded_files = [f for f in session_dir.iterdir() if f.is_file() and f.suffix.lower() not in ['.tmp', '.part', '.ytdl']]
+        if downloaded_files:
+            if progress_callback and loop:
+                asyncio.run_coroutine_threadsafe(progress_callback(100), loop)
+            return downloaded_files[0]
+            
+    except Exception as e:
+        print(f"Native range download failed: {e}. Falling back to full download + trim.")
+
+    # Fallback
+    opts.pop('download_ranges', None)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        ydl.download([url])
+        
+    downloaded_files = [f for f in session_dir.iterdir() if f.is_file() and f.suffix.lower() not in ['.tmp', '.part', '.ytdl']]
+    if not downloaded_files:
+        raise Exception("Не вдалося завантажити медіа для нарізки.")
+        
+    input_file = downloaded_files[0]
+    output_file = session_dir / f"trimmed_{input_file.name}"
+    
+    cmd = [
+        str(ffmpeg_winget) if ffmpeg_winget.exists() else "ffmpeg",
+        "-y", "-ss", str(start_sec), "-to", str(end_sec),
+        "-i", str(input_file),
+        "-c", "copy",
+        str(output_file)
+    ]
+    
+    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    
+    if input_file.exists():
+        input_file.unlink()
+        
+    if progress_callback and loop:
+        asyncio.run_coroutine_threadsafe(progress_callback(100), loop)
+        
+    return output_file

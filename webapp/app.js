@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Prevent swipe if vertical scrolling was dominant
         if (Math.abs(deltaX) > deltaY && Math.abs(deltaX) > swipeThreshold) {
-            const tabs = ['profile', 'leaderboard', 'store', 'settings'];
+            const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'settings'];
             let currentIndex = 0;
             document.querySelectorAll('.section').forEach((sec, idx) => {
                 if (sec.classList.contains('active')) currentIndex = idx;
@@ -230,6 +230,9 @@ function applyTranslations() {
     
     const tabSettingsEl = document.getElementById('tab_settings');
     if (tabSettingsEl) tabSettingsEl.innerText = getText(lang, 'title_settings');
+    
+    const tabClipperEl = document.getElementById('tab_clipper');
+    if (tabClipperEl) tabClipperEl.innerText = getText(lang, 'title_clipper');
     
     // Settings translations
     const labelSettingsMain = document.getElementById('label_settings_main');
@@ -288,6 +291,25 @@ function applyTranslations() {
     
     const btnSaveSettings = document.getElementById('btn_save_settings');
     if (btnSaveSettings) btnSaveSettings.innerText = getText(lang, 'btn_save_settings');
+    
+    // Clipper translations
+    const labelClipperMain = document.getElementById('label_clipper_main');
+    if (labelClipperMain) labelClipperMain.innerText = getText(lang, 'label_clipper_main');
+    
+    const labelClipperDesc = document.getElementById('label_clipper_desc');
+    if (labelClipperDesc) labelClipperDesc.innerText = getText(lang, 'label_clipper_desc');
+    
+    const labelClipperUrl = document.getElementById('label_clipper_url');
+    if (labelClipperUrl) labelClipperUrl.innerText = getText(lang, 'label_clipper_url');
+    
+    const labelClipperStart = document.getElementById('label_clipper_start');
+    if (labelClipperStart) labelClipperStart.innerText = getText(lang, 'label_clipper_start');
+    
+    const labelClipperEnd = document.getElementById('label_clipper_end');
+    if (labelClipperEnd) labelClipperEnd.innerText = getText(lang, 'label_clipper_end');
+    
+    const btnSmartTrim = document.getElementById('btn_smart_trim');
+    if (btnSmartTrim) btnSmartTrim.innerText = getText(lang, 'btn_smart_trim');
 }
 
 function renderProfile() {
@@ -452,25 +474,74 @@ function toggleSettings() {
 
 function saveSettings() {
     triggerHaptic('medium');
-    const btn = document.getElementById('btn_save_settings');
-    if (btn) btn.innerText = '...';
-    
-    const langVal = document.getElementById('settings_language').value;
-    const qualityVal = document.getElementById('settings_guest_quality').value;
+    const langSel = document.getElementById('settings_language').value;
+    const guestQuality = document.getElementById('settings_guest_quality').value;
     const isAnon = document.getElementById('settings_anonymous').checked ? 1 : 0;
-    const themeVal = document.getElementById('settings_theme').value;
-    const watermarkPosVal = document.getElementById('settings_watermark_pos').value;
-    const watermarkFile = document.getElementById('settings_watermark_file').files.length > 0;
+    const theme = document.getElementById('settings_theme').value;
+    const wp = document.getElementById('settings_watermark_pos').value;
     
-    const data = {
+    const fileInput = document.getElementById('settings_watermark_file');
+    const watermarkUpdated = fileInput.files.length > 0;
+
+    const payload = {
         action: 'save_settings',
-        language: langVal,
-        default_quality: qualityVal,
+        language: langSel,
+        default_quality: guestQuality,
         is_anonymous: isAnon,
-        theme: themeVal,
-        watermark_position: watermarkPosVal,
-        watermark_updated: watermarkFile
+        theme: theme,
+        watermark_position: wp,
+        watermark_updated: watermarkUpdated
     };
     
-    tg.sendData(JSON.stringify(data));
+    tg.sendData(JSON.stringify(payload));
+}
+
+function timeToSeconds(timeStr) {
+    const parts = timeStr.split(':').reverse();
+    let seconds = 0;
+    for (let i = 0; i < parts.length; i++) {
+        seconds += parseInt(parts[i]) * Math.pow(60, i);
+    }
+    return seconds;
+}
+
+function validateTimeFormat(timeStr) {
+    return /^(\d{1,2}:)?\d{1,2}:\d{2}$/.test(timeStr);
+}
+
+function submitSmartTrim() {
+    triggerHaptic('medium');
+    const url = document.getElementById('clipper_url').value.trim();
+    const startStr = document.getElementById('clipper_start').value.trim();
+    const endStr = document.getElementById('clipper_end').value.trim();
+    
+    if (!url || !startStr || !endStr) {
+        tg.showAlert("Будь ласка, заповніть всі поля.");
+        return;
+    }
+    
+    if (!validateTimeFormat(startStr) || !validateTimeFormat(endStr)) {
+        tg.showAlert(getText(lang, 'error_clipper_format'));
+        return;
+    }
+    
+    const startSec = timeToSeconds(startStr);
+    const endSec = timeToSeconds(endStr);
+    
+    if (startSec >= endSec) {
+        tg.showAlert(getText(lang, 'error_clipper_times'));
+        return;
+    }
+    
+    // Validation passed, send request to bot
+    const payload = {
+        action: 'smart_trim',
+        url: url,
+        start: startStr,
+        end: endStr,
+        start_sec: startSec,
+        end_sec: endSec
+    };
+    
+    tg.sendData(JSON.stringify(payload));
 }

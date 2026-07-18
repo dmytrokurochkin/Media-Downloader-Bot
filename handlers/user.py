@@ -111,6 +111,27 @@ async def web_app_data_handler(message: Message, state: FSMContext):
             if data.get('watermark_updated'):
                 msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
                 asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
+        elif data.get('action') == 'smart_trim':
+            from handlers.media import process_smart_trim
+            url = data.get('url')
+            start_sec = data.get('start_sec')
+            end_sec = data.get('end_sec')
+            
+            duration = end_sec - start_sec
+            tier = user.get('tier', 'free')
+            
+            if tier == 'free' and duration > 30:
+                text = "⚠️ Безкоштовний тариф дозволяє нарізати фрагменти до 30 секунд. Придбайте Pro або зменшіть тривалість."
+                if user['language_code'] == 'en':
+                    text = "⚠️ Free tier allows trimming up to 30 seconds. Buy Pro or reduce duration."
+                elif user['language_code'] == 'pl':
+                    text = "⚠️ Darmowy plan pozwala na wycinanie do 30 sekund. Kup Pro lub zmniejsz czas."
+                msg = await message.answer(text)
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+                return
+            
+            msg = await message.answer(get_text(user['language_code'], 'starting_download'))
+            asyncio.create_task(process_smart_trim(message, user, url, start_sec, end_sec, msg))
     except Exception as e:
         print("Error handling web_app_data:", e)
 
