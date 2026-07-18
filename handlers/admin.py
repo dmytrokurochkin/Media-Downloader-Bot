@@ -375,3 +375,46 @@ async def process_unban(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.reply(get_text(user['language_code'], 'admin_err_id'))
+
+# --- Ads Management ---
+@admin_router.message(Command("set_ad"))
+async def cmd_set_ad(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        await message.reply("Використання: /set_ad <текст у HTML або MarkdownV2>")
+        return
+    ad_text = args[1]
+    from database import set_active_ad
+    await set_active_ad(ad_text)
+    await message.reply(f"✅ Рекламну кампанію активовано!\nТекст:\n{ad_text}", parse_mode=None)
+
+@admin_router.message(Command("clear_ad"))
+async def cmd_clear_ad(message: Message):
+    if not is_admin(message.from_user.id): return
+    from database import clear_active_ads
+    await clear_active_ads()
+    await message.reply("✅ Усі рекламні кампанії вимкнено.")
+
+@admin_router.message(Command("test_ad"))
+async def cmd_test_ad(message: Message):
+    if not is_admin(message.from_user.id): return
+    from database import get_active_ad
+    ad_text = await get_active_ad()
+    if not ad_text:
+        await message.reply("❌ Немає активної реклами.")
+        return
+    
+    caption = "Оригінальний підпис до медіа."
+    ad_block = f"\n\n📢 Спонсор: {ad_text}"
+    max_len = 1024 - len(ad_block)
+    if len(caption) > max_len:
+        caption = caption[:max_len - 3] + "..."
+    final_caption = caption + ad_block
+
+    await message.answer_photo(
+        photo="https://via.placeholder.com/800x600.png?text=Test+Ad", 
+        caption=final_caption, 
+        parse_mode="HTML"
+    )
+

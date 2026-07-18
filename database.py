@@ -91,6 +91,15 @@ async def init_db():
         )
     ''')
     
+    # Таблиця рекламних кампаній
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS ad_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ad_text TEXT,
+            is_active BOOLEAN DEFAULT 0
+        )
+    ''')
+    
     # Індекси для оптимізації швидкодії
     await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_daily ON downloads(telegram_id, timestamp);')
     await db.execute('CREATE INDEX IF NOT EXISTS idx_user_badges ON user_badges(telegram_id);')
@@ -413,3 +422,24 @@ async def get_user_stats(telegram_id: int) -> Optional[dict]:
     
     return profile
 
+async def get_active_ad() -> Optional[str]:
+    """Повертає текст активної рекламної кампанії, або None."""
+    global _db_connection
+    async with _db_connection.execute('SELECT ad_text FROM ad_campaigns WHERE is_active = 1 LIMIT 1') as cursor:
+        row = await cursor.fetchone()
+        if row:
+            return row['ad_text']
+    return None
+
+async def set_active_ad(ad_text: str):
+    """Робить всі існуючі кампанії неактивними і додає нову активну."""
+    global _db_connection
+    await _db_connection.execute('UPDATE ad_campaigns SET is_active = 0')
+    await _db_connection.execute('INSERT INTO ad_campaigns (ad_text, is_active) VALUES (?, 1)', (ad_text,))
+    await _db_connection.commit()
+
+async def clear_active_ads():
+    """Вимкнути всі рекламні кампанії."""
+    global _db_connection
+    await _db_connection.execute('UPDATE ad_campaigns SET is_active = 0')
+    await _db_connection.commit()

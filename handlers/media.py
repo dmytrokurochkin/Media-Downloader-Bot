@@ -18,13 +18,14 @@ from aiogram.types import (
 
 from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS
 from core.loader import bot
-from database import get_or_create_user, get_daily_download_count, add_download_record, add_downloaded_bytes
+from database import get_or_create_user, get_daily_download_count, add_download_record, add_downloaded_bytes, get_active_ad
 from downloader import download_media
 from locales import get_text
 from keyboards.inline import get_youtube_keyboard
 from core.badges import check_and_award_badges
 
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 
 media_router = Router()
 
@@ -317,6 +318,18 @@ async def cover_photo_handler(message: Message, state: FSMContext):
     message.text = url
     await process_url(message, url, user, is_guest_mode=False, state=state)
 
+async def prepare_caption_with_ad(original_caption: str, user: dict) -> str:
+    original_caption = original_caption or ""
+    if user.get('tier', 'free').lower() == 'free':
+        ad_text = await get_active_ad()
+        if ad_text:
+            ad_block = f"\n\n📢 Спонсор: {ad_text}"
+            max_len = 1024 - len(ad_block)
+            if len(original_caption) > max_len:
+                original_caption = original_caption[:max_len - 3] + "..."
+            return original_caption + ad_block
+    return original_caption[:1024]
+
 async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, user: dict, is_guest_mode: bool, message: Message, lang: str, title: str = None, performer: str = None) -> int:
     """Chunks media and sends to Telegram. Returns total file size."""
     file_size = 0
@@ -329,7 +342,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
         if is_guest_mode:
             filepath = filepath[:10]
         
-        caption = get_text(lang, 'caption_signature')
+        caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
 
         for path in filepath:
             file_size += path.stat().st_size
@@ -389,7 +402,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
         if is_guest_mode:
             try:
                 caller_id = user['telegram_id']
-                caption = get_text(lang, 'caption_signature')
+                caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
                 if filepath.suffix in ['.mp4', '.mkv', '.webm']:
                     res = await bot_instance.send_video(chat_id=caller_id, video=fs_file, request_timeout=3600, caption=caption)
                     file_id = res.video.file_id
@@ -411,7 +424,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
             except Exception as e:
                 print(f"Guest mode single send failed: {e}")
         else:
-            caption = get_text(lang, 'caption_signature')
+            caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
             try:
                 if filepath.suffix in ['.mp4', '.mkv', '.webm']:
                     await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
@@ -723,7 +736,7 @@ async def process_smart_trim(message: Message, user: dict, url: str, start_sec: 
                         
                         # Upload to Telegram
                         bot_me = await bot.get_me()
-                        caption = f"✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot_me.username}"
+                        caption = await prepare_caption_with_ad(f"✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot_me.username}", user)
                         
                         from aiogram.types import InputMediaVideo, FSInputFile
                         media = InputMediaVideo(
