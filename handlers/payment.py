@@ -121,6 +121,31 @@ async def _send_invoice(callback: CallbackQuery, tariff_key: str, tariff: dict, 
     )
     await callback.answer()
 
+async def send_theme_invoice(message: Message, theme: str, user: dict):
+    if theme == 'neon':
+        title = "Neon Theme"
+        description = "Купити Neon Theme / Buy Neon Theme"
+        price = 50
+    elif theme == 'retro':
+        title = "Retro Theme"
+        description = "Купити Retro Theme / Buy Retro Theme"
+        price = 50
+    else:
+        return
+        
+    payload = f"buytheme_{theme}_{message.from_user.id}"
+    prices = [LabeledPrice(label=title, amount=price)]
+    
+    await bot.send_invoice(
+        chat_id=message.chat.id,
+        title=title,
+        description=description,
+        payload=payload,
+        provider_token="",
+        currency="XTR",
+        prices=prices
+    )
+
 @payment_router.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
     await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
@@ -146,3 +171,28 @@ async def successful_payment_handler(message: Message):
                 
             user = await get_or_create_user(user_id, "", "")
             await message.reply(get_text(user['language_code'], 'payment_success', vip_until=formatted_date))
+    elif payload.startswith("buytheme_"):
+        parts = payload.split('_')
+        theme = parts[1]
+        user_id = int(parts[2])
+        
+        from database import add_owned_theme, update_user_settings
+        await add_owned_theme(user_id, theme)
+        
+        user = await get_or_create_user(user_id, "", "")
+        await update_user_settings(
+            user_id, 
+            user['language_code'], 
+            user['guest_yt_quality'], 
+            user['is_anonymous'], 
+            theme, 
+            user['watermark_position']
+        )
+        
+        msg_text = "🎉 Дякуємо за покупку! Нова тема активована. Відкрийте Mini App, щоб побачити зміни."
+        if user['language_code'] == 'en':
+            msg_text = "🎉 Thank you for your purchase! The new theme is activated. Open the Mini App to see the changes."
+        elif user['language_code'] == 'pl':
+            msg_text = "🎉 Dziękujemy za zakup! Nowy motyw został aktywowany. Otwórz Mini App, aby zobaczyć zmiany."
+            
+        await message.reply(msg_text)

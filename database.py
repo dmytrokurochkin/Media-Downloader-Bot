@@ -67,6 +67,8 @@ async def init_db():
             await db.execute('ALTER TABLE users ADD COLUMN last_active_at DATETIME DEFAULT NULL')
         if 'retention_promo_received' not in columns:
             await db.execute('ALTER TABLE users ADD COLUMN retention_promo_received BOOLEAN DEFAULT 0')
+        if 'owned_themes' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN owned_themes TEXT DEFAULT 'standard'")
             
         # Initialize existing users as active now to avoid spamming recent users
         await db.execute('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE last_active_at IS NULL')
@@ -138,6 +140,7 @@ async def get_or_create_user(telegram_id: int, username: str, full_name: str, la
             "banned_support_until": None,
             "is_anonymous": 0,
             "theme": "standard",
+            "owned_themes": "standard",
             "watermark_file_id": None,
             "watermark_position": "bottom_right"
         }
@@ -305,6 +308,17 @@ async def update_user_settings(telegram_id: int, language_code: str, guest_yt_qu
         WHERE telegram_id = ?
     ''', (language_code, guest_yt_quality, is_anonymous, theme, watermark_position, telegram_id))
     await _db_connection.commit()
+
+async def add_owned_theme(telegram_id: int, theme: str):
+    global _db_connection
+    async with _db_connection.execute('SELECT owned_themes FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+        row = await cursor.fetchone()
+        if not row: return
+        owned = row['owned_themes'] or 'standard'
+        if theme not in owned.split(','):
+            owned += f",{theme}"
+            await _db_connection.execute('UPDATE users SET owned_themes = ? WHERE telegram_id = ?', (owned, telegram_id))
+            await _db_connection.commit()
 
 async def ban_user_bot(telegram_id: int, days: Optional[int] = None) -> str:
     global _db_connection

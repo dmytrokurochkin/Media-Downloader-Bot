@@ -33,6 +33,7 @@ const BADGE_ICONS = {
 const currentGuestQuality = urlParams.get('gq') || 'best';
 const currentAnonymous = urlParams.get('anon') === '1';
 const currentTheme = urlParams.get('th') || 'standard';
+const ownedThemes = (urlParams.get('ow') || 'standard').split(',');
 const currentWatermarkPos = urlParams.get('wp') || 'bottom_right';
 
 // Get user data from Telegram SDK if available, fallback to URL param
@@ -68,6 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderLeaderboards();
     setupSearch();
     
+    // Apply current theme
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    
     // Tell Telegram app is ready
     tg.ready();
     
@@ -92,7 +96,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (toggleAnon) toggleAnon.checked = currentAnonymous;
 
     const selTheme = document.getElementById('settings_theme');
-    if (selTheme) selTheme.value = currentTheme;
+    if (selTheme) {
+        selTheme.value = currentTheme;
+        selTheme.addEventListener('change', (e) => {
+            const btn = document.getElementById('btn_save_settings');
+            if (btn) {
+                if (!ownedThemes.includes(e.target.value)) {
+                    btn.innerText = "Купити за 50 ⭐️";
+                } else {
+                    btn.innerText = getText(lang, 'btn_save_settings') || "Save settings";
+                }
+            }
+        });
+    }
 
     const selWatermarkPos = document.getElementById('settings_watermark_pos');
     if (selWatermarkPos) selWatermarkPos.value = currentWatermarkPos;
@@ -493,6 +509,12 @@ function saveSettings() {
     const isAnon = document.getElementById('settings_anonymous').checked ? 1 : 0;
     const theme = document.getElementById('settings_theme').value;
     const wp = document.getElementById('settings_watermark_pos').value;
+    
+    if (!ownedThemes.includes(theme)) {
+        tg.sendData(JSON.stringify({action: "buy_theme", theme: theme}));
+        tg.close();
+        return;
+    }
     
     const fileInput = document.getElementById('settings_watermark_file');
     const watermarkUpdated = fileInput.files.length > 0;

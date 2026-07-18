@@ -481,3 +481,21 @@ select.glass-input option {
     color: var(--text-color);
 }
 
+[data-theme="neon"] {
+    --bg-color: #000000;
+    --text-color: #ffffff;
+    --primary-color: #ffffff;
+    --secondary-color: rgba(57, 255, 20, 0.15);
+    --accent-color: #39ff14;
+    --glass-border: rgba(57, 255, 20, 0.4);
+}
+
+[data-theme="retro"] {
+    --bg-color: #2b2b2b;
+    --text-color: #ffffff;
+    --primary-color: #ff00ff;
+    --secondary-color: rgba(255, 0, 255, 0.15);
+    --accent-color: #00ffff;
+    --glass-border: rgba(255, 0, 255, 0.4);
+}
+

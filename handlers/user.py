@@ -137,6 +137,13 @@ async def web_app_data_handler(message: Message, state: FSMContext):
             guest_yt_quality = data.get('default_quality', user.get('guest_yt_quality', 'best'))
             is_anonymous = int(data.get('is_anonymous', 0))
             theme = data.get('theme', 'standard')
+            owned_themes = user.get('owned_themes', 'standard').split(',')
+            
+            if message.from_user.id in ADMIN_IDS:
+                owned_themes = ['standard', 'neon', 'retro']
+                
+            if theme not in owned_themes:
+                theme = 'standard'
             watermark_position = data.get('watermark_position', 'bottom_right')
             
             await update_user_settings(message.from_user.id, language, guest_yt_quality, is_anonymous, theme, watermark_position)
@@ -148,6 +155,10 @@ async def web_app_data_handler(message: Message, state: FSMContext):
             if data.get('watermark_updated'):
                 msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
                 asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
+        elif data.get('action') == 'buy_theme':
+            theme = data.get('theme')
+            from handlers.payment import send_theme_invoice
+            await send_theme_invoice(message, theme, user)
         elif data.get('action') == 'smart_trim':
             from handlers.media import process_smart_trim
             url = data.get('url')

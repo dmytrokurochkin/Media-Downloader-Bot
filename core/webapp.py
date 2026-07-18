@@ -2,7 +2,7 @@ import urllib.parse
 import datetime
 from database import get_top_users, get_top_domains
 from database import get_top_users, get_top_domains
-from core.config import TIER_LIMITS
+from core.config import TIER_LIMITS, ADMIN_IDS
 
 async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str) -> str:
     """
@@ -65,6 +65,10 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         except Exception:
             pass
 
+    owned_themes = user.get('owned_themes', 'standard')
+    if user.get('telegram_id') in ADMIN_IDS:
+        owned_themes = "standard,neon,retro"
+
     # Build query parameters
     params = {
         'v': 23, # Cache buster for the HTML file itself
@@ -82,6 +86,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'gq': guest_yt_quality,
         'anon': is_anonymous,
         'th': theme,
+        'ow': owned_themes,
         'wp': watermark_position,
         'api': 'http://127.0.0.1:8080/api'
     }
