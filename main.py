@@ -12,6 +12,7 @@ from handlers.admin import admin_router
 from handlers.payment import payment_router
 from handlers.media import media_router
 from middlewares.ban import BanCheckMiddleware
+from core.scheduler import retention_drip_campaign
 from middlewares.throttling import ThrottlingMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +56,9 @@ async def main():
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
     logging.info("API Server started on http://0.0.0.0:8080")
+    
+    # Запуск фонової задачі для retention (утримання)
+    asyncio.create_task(retention_drip_campaign(bot))
     
     await dp.start_polling(bot, allowed_updates=allowed)
 

@@ -63,6 +63,13 @@ async def init_db():
             await db.execute("ALTER TABLE users ADD COLUMN watermark_position TEXT DEFAULT 'bottom_right'")
         if 'total_bytes_downloaded' not in columns:
             await db.execute("ALTER TABLE users ADD COLUMN total_bytes_downloaded INTEGER DEFAULT 0")
+        if 'last_active_at' not in columns:
+            await db.execute('ALTER TABLE users ADD COLUMN last_active_at DATETIME DEFAULT NULL')
+        if 'retention_promo_received' not in columns:
+            await db.execute('ALTER TABLE users ADD COLUMN retention_promo_received BOOLEAN DEFAULT 0')
+            
+        # Initialize existing users as active now to avoid spamming recent users
+        await db.execute('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE last_active_at IS NULL')
     
     # Таблиця історії завантажень (аналітика)
     await db.execute('''
@@ -443,3 +450,37 @@ async def clear_active_ads():
     global _db_connection
     await _db_connection.execute('UPDATE ad_campaigns SET is_active = 0')
     await _db_connection.commit()
+
+async def update_last_active(telegram_id: int):
+    """Оновлює час останньої активності користувача"""
+    global _db_connection
+    if _db_connection:
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        await _db_connection.execute('UPDATE users SET last_active_at = ? WHERE telegram_id = ?', (now, telegram_id))
+        await _db_connection.commit()
+
+async def get_inactive_users(days_inactive: int = 14) -> List[dict]:
+    """Повертає користувачів, які були неактивні більше days_inactive днів"""
+    global _db_connection
+    if not _db_connection:
+        return []
+    
+    threshold_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_inactive)).isoformat()
+    
+    async with _db_connection.execute('''
+        SELECT telegram_id, tier, retention_promo_received
+        FROM users
+        WHERE (last_active_at < ? OR last_active_at IS NULL)
+        AND retention_promo_received = 0
+        AND tier = 'free'
+    ''', (threshold_date,)) as cursor:
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+async def mark_retention_promo_received(telegram_id: int):
+    """Позначає, що користувач отримав промо після неактивності"""
+    global _db_connection
+    if _db_connection:
+        await _db_connection.execute('UPDATE users SET retention_promo_received = 1 WHERE telegram_id = ?', (telegram_id,))
+        await _db_connection.commit()
+

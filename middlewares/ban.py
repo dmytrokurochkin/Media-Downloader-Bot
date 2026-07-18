@@ -1,7 +1,7 @@
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, InlineQuery
 from typing import Callable, Dict, Any, Awaitable
-from database import get_or_create_user
+from database import get_or_create_user, update_last_active
 from locales import get_text
 import datetime
 
@@ -28,6 +28,9 @@ class BanCheckMiddleware(BaseMiddleware):
             full_name = user.full_name if user.full_name else ""
             username = user.username if user.username else ""
             db_user = await get_or_create_user(user.id, username, full_name)
+            
+            # Update user's last activity timestamp
+            await update_last_active(user.id)
             
             # Check bot ban
             if db_user.get('banned_bot_until'):
