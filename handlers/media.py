@@ -23,7 +23,12 @@ from downloader import download_media
 from locales import get_text
 from keyboards.inline import get_youtube_keyboard
 
+from aiogram.fsm.state import State, StatesGroup
+
 media_router = Router()
+
+class AudioEditorState(StatesGroup):
+    waiting_for_cover = State()
 
 # State variables
 download_semaphore = None
@@ -184,14 +189,14 @@ async def text_handler(message: Message):
                 
         await process_url(message, url, user, is_guest_mode=is_guest_mode)
 
-async def process_url(message: Message, url: str, user: dict, is_guest_mode: bool = False):
+async def process_url(message: Message, url: str, user: dict, is_guest_mode: bool = False, state=None):
     if 'threads.com' in url:
         url = url.replace('threads.com', 'threads.net')
         
     is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
     
     if is_audio_service:
-        await start_download(message, url, 'bestaudio/best', user, is_guest_mode=is_guest_mode)
+        await start_download(message, url, 'bestaudio/best', user, is_guest_mode=is_guest_mode, state=state)
     elif 'youtube.com' in url or 'youtu.be' in url:
         if is_guest_mode:
             quality = user.get('guest_yt_quality', 'best')
@@ -213,7 +218,7 @@ async def process_url(message: Message, url: str, user: dict, is_guest_mode: boo
                 fmt = 'bestaudio/best'
             else:
                 fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            await start_download(message, url, fmt, user, is_guest_mode=True)
+            await start_download(message, url, fmt, user, is_guest_mode=True, state=state)
         else:
             await message.reply(
                 get_text(user['language_code'], 'choose_yt_quality', url=url),
@@ -228,7 +233,7 @@ async def process_url(message: Message, url: str, user: dict, is_guest_mode: boo
             fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
         else:
             fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        await start_download(message, url, fmt, user, is_guest_mode=is_guest_mode)
+        await start_download(message, url, fmt, user, is_guest_mode=is_guest_mode, state=state)
 
 @media_router.callback_query(F.data.startswith("yt_"))
 async def youtube_callback(callback: CallbackQuery):
@@ -278,7 +283,40 @@ async def youtube_callback(callback: CallbackQuery):
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
     await start_download(callback.message, url, format_spec, user, is_callback=True)
 
-async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, user: dict, is_guest_mode: bool, message: Message, lang: str) -> int:
+@media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
+async def cover_photo_handler(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    state_data = await state.get_data()
+    
+    if message.photo:
+        file_id = message.photo[-1].file_id
+    elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
+        file_id = message.document.file_id
+    else:
+        text = "⚠️ Будь ласка, надішліть коректне фото."
+        if user['language_code'] == 'en': text = "⚠️ Please send a valid photo."
+        elif user['language_code'] == 'pl': text = "⚠️ Wyślij poprawne zdjęcie."
+        await message.answer(text)
+        return
+        
+    session_dir = Path(f"downloads/cover_{time.time_ns()}")
+    session_dir.mkdir(parents=True, exist_ok=True)
+    cover_path = session_dir / f"cover_{file_id}.jpg"
+    
+    await bot.download(file_id, destination=cover_path)
+    
+    await state.update_data(
+        edit_tags=True,
+        cover_path=str(cover_path)
+    )
+    
+    url = state_data.get('url')
+    await state.set_state(None)
+    
+    message.text = url
+    await process_url(message, url, user, is_guest_mode=False, state=state)
+
+async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, user: dict, is_guest_mode: bool, message: Message, lang: str, title: str = None, performer: str = None) -> int:
     """Chunks media and sends to Telegram. Returns total file size."""
     file_size = 0
     if isinstance(filepath, list):
@@ -301,7 +339,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
             elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
                 visual_group.append(InputMediaPhoto(media=fs_file, caption=caption if not visual_group else None))
             elif ext in ['.mp3', '.m4a', '.wav', '.opus']:
-                audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None))
+                audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None, title=title, performer=performer))
             elif ext not in ['.json', '.description', '.part', '.ytdl', '.spotdl']:
                 document_group.append(InputMediaDocument(media=fs_file, caption=caption if not document_group else None))
         
@@ -360,7 +398,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
                     file_id = res.photo[-1].file_id
                     result_media = InlineQueryResultCachedPhoto(id=str(uuid.uuid4()), photo_file_id=file_id, caption=caption)
                 elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                    res = await bot_instance.send_audio(chat_id=caller_id, audio=fs_file, request_timeout=3600, caption=caption)
+                    res = await bot_instance.send_audio(chat_id=caller_id, audio=fs_file, request_timeout=3600, caption=caption, title=title, performer=performer)
                     file_id = res.audio.file_id
                     result_media = InlineQueryResultCachedAudio(id=str(uuid.uuid4()), audio_file_id=file_id, caption=caption)
                 else:
@@ -377,7 +415,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
                 if filepath.suffix in ['.mp4', '.mkv', '.webm']:
                     await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
                 elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                    await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
+                    await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption, title=title, performer=performer)
                 elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
                     await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
                 else:
@@ -387,7 +425,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
                     if filepath.suffix in ['.mp4', '.mkv', '.webm']:
                         await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, request_timeout=3600, caption=caption)
                     elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                        await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, request_timeout=3600, caption=caption)
+                        await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, request_timeout=3600, caption=caption, title=title, performer=performer)
                     elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
                         await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, request_timeout=3600, caption=caption)
                     else:
@@ -395,7 +433,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
                 except Exception: pass
     return file_size
 
-async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False):
+async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False, state=None):
     lang = user['language_code']
     target_chat = getattr(message, "guest_bot_caller_chat", None) or message.chat
     target_chat_id = target_chat.id if is_guest_mode else message.chat.id
@@ -507,9 +545,41 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                 except Exception as wm_e:
                     print(f"Watermark error: {wm_e}")
                     
+            # Audio Tags Editor integration
+            audio_title, audio_performer = None, None
+            if state:
+                state_data = await state.get_data()
+                if state_data.get('edit_tags'):
+                    from downloader import apply_audio_metadata
+                    audio_title = state_data.get('title')
+                    audio_performer = state_data.get('artist')
+                    audio_album = state_data.get('album')
+                    cover_path_str = state_data.get('cover_path')
+                    cover_path = Path(cover_path_str) if cover_path_str else None
+                    
+                    files_to_tag = filepath if isinstance(filepath, list) else [filepath]
+                    tagged_files = []
+                    
+                    for f in files_to_tag:
+                        ext = f.suffix.lower()
+                        if ext in ['.mp3', '.m4a', '.wav', '.opus', '.flac']:
+                            out_path = f.with_name(f"tagged_{f.name}")
+                            await apply_audio_metadata(f, out_path, audio_title, audio_performer, audio_album, cover_path)
+                            tagged_files.append(out_path)
+                        else:
+                            tagged_files.append(f)
+                            
+                    filepath = tagged_files if isinstance(filepath, list) else tagged_files[0]
+                    await state.clear()
+                    if cover_path and cover_path.exists():
+                        try:
+                            import shutil
+                            shutil.rmtree(cover_path.parent, ignore_errors=True)
+                        except Exception: pass
+                    
             # Send media
             target_msg = status_msg if is_callback else message
-            file_size = await dispatch_telegram_media(bot, target_chat_id, filepath, user, is_guest_mode, target_msg, lang)
+            file_size = await dispatch_telegram_media(bot, target_chat_id, filepath, user, is_guest_mode, target_msg, lang, title=audio_title, performer=audio_performer)
             
             if not is_guest_mode:
                 try:

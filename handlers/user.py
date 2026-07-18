@@ -132,6 +132,54 @@ async def web_app_data_handler(message: Message, state: FSMContext):
             
             msg = await message.answer(get_text(user['language_code'], 'starting_download'))
             asyncio.create_task(process_smart_trim(message, user, url, start_sec, end_sec, msg))
+        elif data.get('action') == 'edit_tags':
+            from handlers.media import AudioEditorState, process_url
+            url = data.get('url')
+            title = data.get('title', '')
+            artist = data.get('artist', '')
+            album = data.get('album', '')
+            has_cover = data.get('has_cover', False)
+            
+            tier = user.get('tier', 'free')
+            if tier == 'free':
+                text = "⚠️ Редагування тегів доступне лише для тарифів Pro та Max."
+                if user['language_code'] == 'en':
+                    text = "⚠️ Tag editing is only available for Pro and Max tiers."
+                elif user['language_code'] == 'pl':
+                    text = "⚠️ Edycja tagów jest dostępna tylko dla planów Pro i Max."
+                msg = await message.answer(text)
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+                return
+                
+            if has_cover:
+                await state.set_state(AudioEditorState.waiting_for_cover)
+                await state.update_data(
+                    url=url,
+                    title=title,
+                    artist=artist,
+                    album=album
+                )
+                text = "🖼 Надішліть фотографію для обкладинки треку (як звичайне фото, не файл)."
+                if user['language_code'] == 'en':
+                    text = "🖼 Send a photo for the track cover (as a photo, not a file)."
+                elif user['language_code'] == 'pl':
+                    text = "🖼 Wyślij zdjęcie na okładkę utworu (jako zdjęcie, nie jako plik)."
+                await message.answer(text)
+            else:
+                message.text = url # Hack to reuse process_url logic but we need to pass metadata
+                # Since process_url uses message.text to find url, we will just call process_url with url
+                # Wait, process_url doesn't take metadata yet. We need a way to pass metadata.
+                # Let's use a temporary state or pass kwargs. For now, since process_url is complex,
+                # we can store metadata in state and pass the state, or add kwargs to process_url.
+                # Let's store metadata in state and clear state after download starts.
+                await state.update_data(
+                    edit_tags=True,
+                    title=title,
+                    artist=artist,
+                    album=album,
+                    cover_path=None
+                )
+                await process_url(message, url, user, is_guest_mode=False, state=state)
     except Exception as e:
         print("Error handling web_app_data:", e)
 

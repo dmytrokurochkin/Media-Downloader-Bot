@@ -580,3 +580,31 @@ def download_trim_sync(url: str, start_sec: int, end_sec: int, session_dir: Path
         asyncio.run_coroutine_threadsafe(progress_callback(100), loop)
         
     return output_file
+
+async def apply_audio_metadata(input_path: Path, output_path: Path, title: str, artist: str, album: str, cover_path: Path = None) -> Path:
+    from core.config import FFMPEG_WIN_PATH
+    ffmpeg_winget = Path(FFMPEG_WIN_PATH)
+    ffmpeg_bin = str(ffmpeg_winget) if ffmpeg_winget.exists() else "ffmpeg"
+    
+    cmd = [ffmpeg_bin, "-y", "-i", str(input_path)]
+    
+    if cover_path and cover_path.exists():
+        cmd.extend(["-i", str(cover_path), "-map", "0:a", "-map", "1:0", "-c", "copy", "-id3v2_version", "3"])
+        cmd.extend(["-metadata:s:v", "title=Album cover", "-metadata:s:v", "comment=Cover (front)"])
+    else:
+        cmd.extend(["-c", "copy", "-id3v2_version", "3"])
+        
+    if title: cmd.extend(["-metadata", f"title={title}"])
+    if artist: cmd.extend(["-metadata", f"artist={artist}"])
+    if album: cmd.extend(["-metadata", f"album={album}"])
+    
+    cmd.append(str(output_path))
+    
+    try:
+        await asyncio.to_thread(subprocess.run, cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg tag error: {e.stderr}")
+        import shutil
+        shutil.copy(input_path, output_path) # Fallback to original
+        
+    return output_path

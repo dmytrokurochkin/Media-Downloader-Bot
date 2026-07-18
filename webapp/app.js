@@ -545,3 +545,30 @@ function submitSmartTrim() {
     
     tg.sendData(JSON.stringify(payload));
 }
+
+function submitAudioEditor() {
+    triggerHaptic('medium');
+    const url = document.getElementById('editor_url').value.trim();
+    const title = document.getElementById('editor_title').value.trim();
+    const artist = document.getElementById('editor_artist').value.trim();
+    const album = document.getElementById('editor_album').value.trim();
+    
+    if (!url) {
+        tg.showAlert("Будь ласка, введіть посилання на трек.");
+        return;
+    }
+    
+    const fileInput = document.getElementById('editor_cover');
+    const hasCover = fileInput.files.length > 0;
+
+    const payload = {
+        action: 'edit_tags',
+        url: url,
+        title: title,
+        artist: artist,
+        album: album,
+        has_cover: hasCover
+    };
+    
+    tg.sendData(JSON.stringify(payload));
+}
