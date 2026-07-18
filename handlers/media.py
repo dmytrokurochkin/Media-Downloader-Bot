@@ -473,6 +473,39 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                     filepath = media_files[0]
                 elif len(media_files) > 1:
                     filepath = media_files
+            
+            # Watermark integration
+            if user.get('tier') == 'Max' and user.get('watermark_file_id'):
+                from core.watermark import apply_video_watermark, apply_image_watermark
+                watermark_file_id = user['watermark_file_id']
+                watermark_pos = user.get('watermark_position', 'bottom_right')
+                
+                watermark_path = session_dir / f"watermark_{watermark_file_id}.png"
+                try:
+                    await bot.download(watermark_file_id, destination=watermark_path)
+                    
+                    files_to_watermark = filepath if isinstance(filepath, list) else [filepath]
+                    watermarked_files = []
+                    
+                    for f in files_to_watermark:
+                        ext = f.suffix.lower()
+                        if ext in ['.mp4', '.mkv', '.webm']:
+                            out_path = f.with_name(f"wm_{f.name}")
+                            await apply_video_watermark(f, watermark_path, watermark_pos, out_path)
+                            watermarked_files.append(out_path)
+                        elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
+                            out_path = f.with_name(f"wm_{f.name}")
+                            await apply_image_watermark(f, watermark_path, watermark_pos, out_path)
+                            watermarked_files.append(out_path)
+                        else:
+                            watermarked_files.append(f)
+                            
+                    if isinstance(filepath, list):
+                        filepath = watermarked_files
+                    else:
+                        filepath = watermarked_files[0]
+                except Exception as wm_e:
+                    print(f"Watermark error: {wm_e}")
                     
             # Send media
             target_msg = status_msg if is_callback else message
