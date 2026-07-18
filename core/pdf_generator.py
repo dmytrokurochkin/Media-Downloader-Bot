@@ -5,20 +5,56 @@ from bs4 import BeautifulSoup
 from readability import Document
 from weasyprint import HTML, CSS
 
+async def is_safe_url(url: str) -> bool:
+    import socket
+    import ipaddress
+    from urllib.parse import urlparse
+    
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        
+        loop = asyncio.get_running_loop()
+        addr_info = await loop.getaddrinfo(hostname, None)
+        for result in addr_info:
+            ip_str = result[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+                return False
+        return True
+    except Exception:
+        return False
+
 async def generate_article_pdf(url: str, output_path: Path) -> Path:
     """
     Завантажує HTML-сторінку, витягує головний контент статті за допомогою readability-lxml
     і генерує PDF-файл за допомогою weasyprint.
     """
+    if not await is_safe_url(url):
+        raise Exception("Недопустима або небезпечна URL-адреса.")
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
     }
+    
+    MAX_SIZE = 5 * 1024 * 1024 # 5 MB
+    html_bytes = bytearray()
     
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers, timeout=15) as resp:
             if resp.status != 200:
                 raise Exception(f"Не вдалося завантажити сторінку (статус {resp.status})")
-            html = await resp.text()
+            
+            async for chunk in resp.content.iter_chunked(8192):
+                html_bytes.extend(chunk)
+                if len(html_bytes) > MAX_SIZE:
+                    raise Exception("Файл занадто великий (ліміт 5 МБ)")
+                    
+            html = html_bytes.decode('utf-8', errors='replace')
 
     # Парсимо статтю
     doc = Document(html)

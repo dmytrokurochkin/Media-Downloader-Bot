@@ -33,13 +33,18 @@ def create_api_app() -> web.Application:
         app.router.add_static('/webapp', str(webapp_path))
     
     # Setup CORS
-    cors = aiohttp_cors.setup(app, defaults={
-        "*": aiohttp_cors.ResourceOptions(
+    import os
+    allowed_origins = os.getenv("ALLOWED_CORS_ORIGINS", "https://dmytrokurochkin.github.io,https://mrmozozavr.github.io").split(",")
+    
+    defaults = {}
+    for origin in allowed_origins:
+        defaults[origin.strip()] = aiohttp_cors.ResourceOptions(
             allow_credentials=True,
             expose_headers="*",
             allow_headers="*",
         )
-    })
+        
+    cors = aiohttp_cors.setup(app, defaults=defaults)
     
     for route in list(app.router.routes()):
         cors.add(route)

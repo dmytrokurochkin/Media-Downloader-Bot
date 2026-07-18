@@ -81,6 +81,7 @@ async def btn_broadcast(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_broadcast_message)
 async def process_broadcast_message(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     await state.update_data(broadcast_message_id=message.message_id)
     from aiogram.utils.keyboard import ReplyKeyboardBuilder
@@ -97,6 +98,7 @@ async def process_broadcast_message(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_broadcast_button)
 async def process_broadcast_button(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     data = await state.get_data()
     msg_id = data.get("broadcast_message_id")
@@ -105,6 +107,9 @@ async def process_broadcast_button(message: Message, state: FSMContext):
     if message.text and message.text != no_btn_text:
         if " - " in message.text:
             text, url = message.text.split(" - ", 1)
+            if not url.strip().startswith(('http://', 'https://')):
+                await message.reply("Невірний формат лінку. Має починатись з http:// або https://")
+                return
             from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
             reply_markup = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text=text.strip(), url=url.strip())]
@@ -145,6 +150,7 @@ async def btn_reply(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_reply)
 async def process_reply(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
@@ -179,6 +185,7 @@ async def btn_give_vip(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_give_vip)
 async def process_give_vip(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     args = message.text.split()
     if len(args) < 2:
@@ -227,6 +234,7 @@ async def btn_remove_vip(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_remove_vip)
 async def process_remove_vip(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     try:
         target_id = int(message.text.strip())
@@ -301,6 +309,7 @@ async def btn_ban_bot(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_ban_bot)
 async def process_ban_bot(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     args = message.text.split()
     try:
@@ -334,6 +343,7 @@ async def btn_ban_support(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_ban_support)
 async def process_ban_support(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     args = message.text.split()
     try:
@@ -367,6 +377,7 @@ async def btn_unban(message: Message, state: FSMContext):
 
 @admin_router.message(AdminState.waiting_for_unban)
 async def process_unban(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     try:
         target_id = int(message.text.strip())
