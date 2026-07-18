@@ -15,6 +15,8 @@ if [ ! -f .env ]; then
     read -p "Введіть BOT_USERNAME (без @, наприклад SaveMDLBot): " bot_username
     read -p "Введіть ваш API_ID (з my.telegram.org): " api_id
     read -p "Введіть ваш API_HASH (з my.telegram.org): " api_hash
+    read -p "Введіть ваш Telegram ID (для прав адміна): " admin_ids
+    read -p "Введіть URL вашого Mini App (наприклад, https://dmytrokurochkin.github.io): " cors_origins
 
     cat > .env <<EOL
 BOT_TOKEN=${bot_token}
@@ -22,6 +24,8 @@ BOT_USERNAME=${bot_username}
 LOCAL_API_SERVER_URL=http://127.0.0.1:8081
 API_ID=${api_id}
 API_HASH=${api_hash}
+ADMIN_IDS=${admin_ids}
+ALLOWED_CORS_ORIGINS=${cors_origins}
 EOL
     echo -e "${GREEN}Файл .env створено!${NC}"
 else
@@ -38,7 +42,7 @@ if [ "$EUID" -ne 0 ]; then
     SUDO="sudo"
 fi
 $SUDO apt-get update
-$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg curl
+$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg curl libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
 
 # 3. Завантаження та збірка Telegram Bot API (якщо не зібрано)
 echo -e "\n${BLUE}[3/7] Налаштування Telegram Bot API Server...${NC}"
