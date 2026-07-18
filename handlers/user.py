@@ -5,8 +5,9 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains
+from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings
 from locales import get_text
+import json
 from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard
 from keyboards.reply import get_main_keyboard
 from core.config import TIER_LIMITS, ADMIN_IDS
@@ -87,6 +88,31 @@ async def settings_command(message: Message, state: FSMContext):
     text = get_text(user['language_code'], 'settings_menu_text')
     msg = await message.reply(text, reply_markup=get_settings_main_keyboard(user['language_code']))
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+
+@user_router.message(F.web_app_data)
+async def web_app_data_handler(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    try:
+        data = json.loads(message.web_app_data.data)
+        if data.get('action') == 'save_settings':
+            language = data.get('language', user['language_code'])
+            guest_yt_quality = data.get('default_quality', user.get('guest_yt_quality', 'best'))
+            is_anonymous = int(data.get('is_anonymous', 0))
+            theme = data.get('theme', 'standard')
+            watermark_position = data.get('watermark_position', 'bottom_right')
+            
+            await update_user_settings(message.from_user.id, language, guest_yt_quality, is_anonymous, theme, watermark_position)
+            
+            success_text = get_text(language, 'settings_saved_webapp')
+            msg = await message.answer(success_text)
+            asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+            
+            if data.get('watermark_updated'):
+                msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
+                asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
+    except Exception as e:
+        print("Error handling web_app_data:", e)
 
 @user_router.callback_query(F.data == "set_lang")
 async def settings_set_lang(callback: CallbackQuery):

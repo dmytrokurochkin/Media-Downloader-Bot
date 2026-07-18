@@ -18,6 +18,10 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     limit_size = TIER_LIMITS.get(tier, {}).get('size', 50*1024*1024)
     lang = user.get('language_code', 'uk')
     user_name = user.get('full_name', 'User')
+    guest_yt_quality = user.get('guest_yt_quality', 'best')
+    is_anonymous = user.get('is_anonymous', 0)
+    theme = user.get('theme', 'standard')
+    watermark_position = user.get('watermark_position', 'bottom_right')
     
     # Fetch Leaderboards
     top_users_data = await get_top_users(limit=10)
@@ -74,7 +78,11 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'ts': ts_str,
         'b': bot_username,
         'nm': user_name,
-        'vu': vu_ts
+        'vu': vu_ts,
+        'gq': guest_yt_quality,
+        'anon': is_anonymous,
+        'th': theme,
+        'wp': watermark_position
     }
     
     # URL Encode the parameters safely

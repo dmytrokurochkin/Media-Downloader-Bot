@@ -51,6 +51,16 @@ async def init_db():
             await db.execute('ALTER TABLE users ADD COLUMN banned_bot_until DATETIME DEFAULT NULL')
         if 'banned_support_until' not in columns:
             await db.execute('ALTER TABLE users ADD COLUMN banned_support_until DATETIME DEFAULT NULL')
+        
+        # Налаштування
+        if 'is_anonymous' not in columns:
+            await db.execute('ALTER TABLE users ADD COLUMN is_anonymous BOOLEAN DEFAULT 0')
+        if 'theme' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'standard'")
+        if 'watermark_file_id' not in columns:
+            await db.execute('ALTER TABLE users ADD COLUMN watermark_file_id TEXT DEFAULT NULL')
+        if 'watermark_position' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN watermark_position TEXT DEFAULT 'bottom_right'")
     
     # Таблиця історії завантажень (аналітика)
     await db.execute('''
@@ -94,7 +104,11 @@ async def get_or_create_user(telegram_id: int, username: str, full_name: str, la
             "guest_yt_quality": "best",
             "tier": "free",
             "banned_bot_until": None,
-            "banned_support_until": None
+            "banned_support_until": None,
+            "is_anonymous": 0,
+            "theme": "standard",
+            "watermark_file_id": None,
+            "watermark_position": "bottom_right"
         }
     
     # Оновлюємо ім'я та юзернейм, якщо вони змінились
@@ -250,6 +264,15 @@ async def get_top_users(limit: int = 10) -> List[dict]:
 async def set_guest_yt_quality(telegram_id: int, quality: str):
     global _db_connection
     await _db_connection.execute('UPDATE users SET guest_yt_quality = ? WHERE telegram_id = ?', (quality, telegram_id))
+    await _db_connection.commit()
+
+async def update_user_settings(telegram_id: int, language_code: str, guest_yt_quality: str, is_anonymous: bool, theme: str, watermark_position: str):
+    global _db_connection
+    await _db_connection.execute('''
+        UPDATE users 
+        SET language_code = ?, guest_yt_quality = ?, is_anonymous = ?, theme = ?, watermark_position = ?
+        WHERE telegram_id = ?
+    ''', (language_code, guest_yt_quality, is_anonymous, theme, watermark_position, telegram_id))
     await _db_connection.commit()
 
 async def ban_user_bot(telegram_id: int, days: Optional[int] = None) -> str:

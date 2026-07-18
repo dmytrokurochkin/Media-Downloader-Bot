@@ -22,6 +22,12 @@ const botUsername = urlParams.get('b') || '';
 const userNameParam = urlParams.get('nm') || '';
 const vipUntilTs = parseInt(urlParams.get('vu') || '0');
 
+// Settings params
+const currentGuestQuality = urlParams.get('gq') || 'best';
+const currentAnonymous = urlParams.get('anon') === '1';
+const currentTheme = urlParams.get('th') || 'standard';
+const currentWatermarkPos = urlParams.get('wp') || 'bottom_right';
+
 // Get user data from Telegram SDK if available, fallback to URL param
 let userFirstName = userNameParam || 'User';
 let userPhotoUrl = null;
@@ -66,6 +72,22 @@ document.addEventListener('DOMContentLoaded', () => {
             triggerHaptic('medium');
         });
     }
+
+    // Pre-fill settings form
+    const selLang = document.getElementById('settings_language');
+    if (selLang) selLang.value = lang;
+
+    const selQuality = document.getElementById('settings_guest_quality');
+    if (selQuality) selQuality.value = currentGuestQuality;
+
+    const toggleAnon = document.getElementById('settings_anonymous');
+    if (toggleAnon) toggleAnon.checked = currentAnonymous;
+
+    const selTheme = document.getElementById('settings_theme');
+    if (selTheme) selTheme.value = currentTheme;
+
+    const selWatermarkPos = document.getElementById('settings_watermark_pos');
+    if (selWatermarkPos) selWatermarkPos.value = currentWatermarkPos;
     
     // Interactive spotlight and prism effect
     const updateCursorPos = (e) => {
@@ -155,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Prevent swipe if vertical scrolling was dominant
         if (Math.abs(deltaX) > deltaY && Math.abs(deltaX) > swipeThreshold) {
-            const tabs = ['profile', 'leaderboard', 'store'];
+            const tabs = ['profile', 'leaderboard', 'store', 'settings'];
             let currentIndex = 0;
             document.querySelectorAll('.section').forEach((sec, idx) => {
                 if (sec.classList.contains('active')) currentIndex = idx;
@@ -206,9 +228,66 @@ function applyTranslations() {
     document.getElementById('tab_leaderboard').innerText = getText(lang, 'title_leaderboard');
     document.getElementById('tab_store').innerText = getText(lang, 'title_store');
     
-    document.getElementById('label_settings').innerText = getText(lang, 'settings');
-    document.getElementById('label_vibration').innerText = getText(lang, 'vibration');
-    document.getElementById('btn_close_settings').innerText = getText(lang, 'btn_close');
+    const tabSettingsEl = document.getElementById('tab_settings');
+    if (tabSettingsEl) tabSettingsEl.innerText = getText(lang, 'title_settings');
+    
+    // Settings translations
+    const labelSettingsMain = document.getElementById('label_settings_main');
+    if (labelSettingsMain) labelSettingsMain.innerText = getText(lang, 'label_settings_main');
+    
+    const labelLanguage = document.getElementById('label_language');
+    if (labelLanguage) labelLanguage.innerText = getText(lang, 'label_language');
+    
+    const labelGuestQuality = document.getElementById('label_guest_quality');
+    if (labelGuestQuality) labelGuestQuality.innerText = getText(lang, 'label_guest_quality');
+    
+    const labelTheme = document.getElementById('label_theme');
+    if (labelTheme) labelTheme.innerText = getText(lang, 'label_theme');
+    
+    const optThemeStandard = document.getElementById('opt_theme_standard');
+    if (optThemeStandard) optThemeStandard.innerText = getText(lang, 'opt_theme_standard');
+    
+    const optThemeNeon = document.getElementById('opt_theme_neon');
+    if (optThemeNeon) optThemeNeon.innerText = getText(lang, 'opt_theme_neon');
+    
+    const optThemeRetro = document.getElementById('opt_theme_retro');
+    if (optThemeRetro) optThemeRetro.innerText = getText(lang, 'opt_theme_retro');
+    
+    const labelAnon = document.getElementById('label_anonymous');
+    if (labelAnon) labelAnon.innerText = getText(lang, 'label_anonymous');
+    
+    const labelAnonDesc = document.getElementById('label_anonymous_desc');
+    if (labelAnonDesc) labelAnonDesc.innerText = getText(lang, 'label_anonymous_desc');
+    
+    const labelVibration = document.getElementById('label_vibration');
+    if (labelVibration) labelVibration.innerText = getText(lang, 'vibration');
+    
+    const labelBranding = document.getElementById('label_branding');
+    if (labelBranding) labelBranding.innerText = getText(lang, 'label_branding');
+    
+    const labelWatermarkPos = document.getElementById('label_watermark_pos');
+    if (labelWatermarkPos) labelWatermarkPos.innerText = getText(lang, 'label_watermark_pos');
+    
+    const optPosTl = document.getElementById('opt_pos_tl');
+    if (optPosTl) optPosTl.innerText = getText(lang, 'opt_pos_tl');
+    
+    const optPosTr = document.getElementById('opt_pos_tr');
+    if (optPosTr) optPosTr.innerText = getText(lang, 'opt_pos_tr');
+    
+    const optPosBl = document.getElementById('opt_pos_bl');
+    if (optPosBl) optPosBl.innerText = getText(lang, 'opt_pos_bl');
+    
+    const optPosBr = document.getElementById('opt_pos_br');
+    if (optPosBr) optPosBr.innerText = getText(lang, 'opt_pos_br');
+    
+    const labelWatermarkFile = document.getElementById('label_watermark_file');
+    if (labelWatermarkFile) labelWatermarkFile.innerText = getText(lang, 'label_watermark_file');
+    
+    const labelWatermarkHint = document.getElementById('label_watermark_hint');
+    if (labelWatermarkHint) labelWatermarkHint.innerText = getText(lang, 'label_watermark_hint');
+    
+    const btnSaveSettings = document.getElementById('btn_save_settings');
+    if (btnSaveSettings) btnSaveSettings.innerText = getText(lang, 'btn_save_settings');
 }
 
 function renderProfile() {
@@ -365,21 +444,33 @@ function buyVip() {
 
 function toggleSettings() {
     triggerHaptic('medium');
-    const modal = document.getElementById('settingsModal');
-    const toggle = document.getElementById('vibrationToggle');
-    
-    if (modal.style.display === 'none' || !modal.style.display) {
-        toggle.checked = hapticEnabled;
-        modal.style.display = 'flex';
-        // Force reflow
-        void modal.offsetWidth;
-        modal.style.opacity = '1';
-        modal.querySelector('.modal-content').style.transform = 'scale(1)';
-    } else {
-        modal.style.opacity = '0';
-        modal.querySelector('.modal-content').style.transform = 'scale(0.9)';
-        setTimeout(() => {
-            modal.style.display = 'none';
-        }, 300);
+    const navSettings = document.getElementById('nav-settings');
+    if (navSettings) {
+        switchTab('settings', navSettings);
     }
+}
+
+function saveSettings() {
+    triggerHaptic('medium');
+    const btn = document.getElementById('btn_save_settings');
+    if (btn) btn.innerText = '...';
+    
+    const langVal = document.getElementById('settings_language').value;
+    const qualityVal = document.getElementById('settings_guest_quality').value;
+    const isAnon = document.getElementById('settings_anonymous').checked ? 1 : 0;
+    const themeVal = document.getElementById('settings_theme').value;
+    const watermarkPosVal = document.getElementById('settings_watermark_pos').value;
+    const watermarkFile = document.getElementById('settings_watermark_file').files.length > 0;
+    
+    const data = {
+        action: 'save_settings',
+        language: langVal,
+        default_quality: qualityVal,
+        is_anonymous: isAnon,
+        theme: themeVal,
+        watermark_position: watermarkPosVal,
+        watermark_updated: watermarkFile
+    };
+    
+    tg.sendData(JSON.stringify(data));
 }

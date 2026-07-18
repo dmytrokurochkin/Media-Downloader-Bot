@@ -15,7 +15,7 @@
         <header class="header glass" style="display: flex; justify-content: space-between; align-items: center;">
             <div style="width: 24px;"></div>
             <h1 id="pageTitle" style="margin: 0; flex: 1;">Мій Профіль</h1>
-            <div class="settings-icon" onclick="toggleSettings()" style="width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+            <div class="settings-icon" onclick="switchTab('settings', document.getElementById('nav-settings'))" style="width: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
             </div>
         </header>
@@ -100,36 +100,97 @@
 
         </main>
 
-        <!-- Settings Modal -->
-        <div id="settingsModal" class="modal-overlay" style="display: none;">
-            <div class="card glass center-text modal-content">
-                <h3 id="label_settings" style="margin-bottom: 1.5rem; font-size: 1.25rem;">Settings</h3>
-                
-                <div class="setting-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; text-align: left;">
-                    <span id="label_vibration" style="font-weight: 500;">Vibration (Haptic)</span>
-                    <label class="switch">
-                        <input type="checkbox" id="vibrationToggle">
-                        <span class="slider round"></span>
-                    </label>
+            <!-- Settings Section -->
+            <section id="section-settings" class="section">
+                <div class="card glass fade-in">
+                    <h3 id="label_settings_main" class="section-title">Налаштування</h3>
+                    
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_language" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Мова інтерфейсу</label>
+                        <select id="settings_language" class="glass-input">
+                            <option value="uk">Українська 🇺🇦</option>
+                            <option value="en">English 🇬🇧</option>
+                            <option value="pl">Polski 🇵🇱</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_guest_quality" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Якість YouTube</label>
+                        <select id="settings_guest_quality" class="glass-input">
+                            <option value="360p">360p</option>
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="best">Best Quality 🔥</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_theme" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Тема оформлення</label>
+                        <select id="settings_theme" class="glass-input">
+                            <option value="standard" id="opt_theme_standard">Стандартна</option>
+                            <option value="neon" id="opt_theme_neon">Неон</option>
+                            <option value="retro" id="opt_theme_retro">Ретро</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; text-align: left; padding: 0.5rem 0;">
+                        <div>
+                            <span id="label_anonymous" style="font-weight: 500; display: block; margin-bottom: 0.25rem;">Анонімний профіль</span>
+                            <span id="label_anonymous_desc" style="font-size: 0.75rem; opacity: 0.7; display: block; max-width: 200px;">Приховати профіль з лідерборду.</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="settings_anonymous">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <div class="setting-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; text-align: left; padding: 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.5rem;">
+                        <span id="label_vibration" style="font-weight: 500;">Вібрація (Haptic)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="vibrationToggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <h3 id="label_branding" class="section-title" style="margin-top: 1rem;">Автоматичне брендування</h3>
+                    
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_watermark_pos" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Позиція логотипа</label>
+                        <select id="settings_watermark_pos" class="glass-input">
+                            <option value="top_left" id="opt_pos_tl">Лівий верхній</option>
+                            <option value="top_right" id="opt_pos_tr">Правий верхній</option>
+                            <option value="bottom_left" id="opt_pos_bl">Лівий нижній</option>
+                            <option value="bottom_right" id="opt_pos_br">Правий нижній</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
+                        <label id="label_watermark_file" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Завантажити логотип</label>
+                        <input type="file" id="settings_watermark_file" accept="image/*" class="glass-input" style="padding: 0.5rem;">
+                        <span id="label_watermark_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Якщо ви оберете файл, бот попросить вас надіслати його в чат для підтвердження.</span>
+                    </div>
+
+                    <button class="primary-btn pulse" onclick="saveSettings()" id="btn_save_settings">Зберегти</button>
                 </div>
-                
-                <button class="primary-btn" onclick="toggleSettings()" id="btn_close_settings">Close</button>
-            </div>
-        </div>
+            </section>
 
         <!-- Bottom Navigation -->
         <nav class="bottom-nav glass">
-            <button class="nav-item active" onclick="switchTab('profile', this)">
+            <button class="nav-item active" id="nav-profile" onclick="switchTab('profile', this)">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 <span id="tab_profile">Profile</span>
             </button>
-            <button class="nav-item" onclick="switchTab('leaderboard', this)">
+            <button class="nav-item" id="nav-leaderboard" onclick="switchTab('leaderboard', this)">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M16 11V3H8v6H2v12h20V11h-6zm-6-6h4v14h-4V5zm-6 6h4v8H4v-8zm16 8h-4v-6h4v6z"/></svg>
                 <span id="tab_leaderboard">Ranks</span>
             </button>
-            <button class="nav-item" onclick="switchTab('store', this)">
+            <button class="nav-item" id="nav-store" onclick="switchTab('store', this)">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 <span id="tab_store">Store</span>
+            </button>
+            <button class="nav-item" id="nav-settings" onclick="switchTab('settings', this)">
+                <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22l-1.92 3.32c-.12.21-.07.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                <span id="tab_settings">Settings</span>
             </button>
         </nav>
         
