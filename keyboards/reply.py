@@ -26,11 +26,12 @@ def get_admin_keyboard(lang: str) -> ReplyKeyboardMarkup:
     builder.button(text=get_text(lang, 'admin_btn_reply'))
     builder.button(text=get_text(lang, 'admin_btn_give_vip'))
     builder.button(text=get_text(lang, 'admin_btn_revoke_vip'))
+    builder.button(text=get_text(lang, 'admin_btn_vip_list'))
     builder.button(text=get_text(lang, 'admin_btn_ban_bot'))
     builder.button(text=get_text(lang, 'admin_btn_ban_support'))
     builder.button(text=get_text(lang, 'admin_btn_unban'))
     builder.button(text=get_text(lang, 'admin_btn_exit'))
-    builder.adjust(2, 2, 3, 1)
+    builder.adjust(2, 3, 3, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_cancel_keyboard(lang: str) -> ReplyKeyboardMarkup:

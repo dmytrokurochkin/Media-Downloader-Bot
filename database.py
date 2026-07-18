@@ -280,3 +280,15 @@ async def unban_user(telegram_id: int):
     global _db_connection
     await _db_connection.execute('UPDATE users SET banned_bot_until = NULL, banned_support_until = NULL WHERE telegram_id = ?', (telegram_id,))
     await _db_connection.commit()
+
+async def get_vip_users() -> List[dict]:
+    """Повертає список всіх VIP користувачів з деталями"""
+    global _db_connection
+    async with _db_connection.execute('''
+        SELECT telegram_id, username, full_name, tier, vip_until 
+        FROM users 
+        WHERE is_vip = 1
+        ORDER BY vip_until ASC
+    ''') as cursor:
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]

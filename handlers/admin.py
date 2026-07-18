@@ -8,7 +8,7 @@ from datetime import datetime
 
 from core.config import ADMIN_IDS
 from core.loader import bot
-from database import get_or_create_user, get_all_users, grant_vip, revoke_vip, get_users_stats_by_tier, ban_user_bot, ban_user_support, unban_user
+from database import get_or_create_user, get_all_users, grant_vip, revoke_vip, get_users_stats_by_tier, ban_user_bot, ban_user_support, unban_user, get_vip_users
 from locales import get_text
 from keyboards.reply import get_admin_keyboard, get_admin_cancel_keyboard, get_main_keyboard
 from core.utils import delete_later
@@ -238,6 +238,56 @@ async def process_remove_vip(message: Message, state: FSMContext):
             await message.reply(get_text(user['language_code'], 'admin_err_not_found'))
         else:
             await message.reply(get_text(user['language_code'], 'admin_err_id'))
+
+# --- VIP List ---
+@admin_router.message(text_matches('admin_btn_vip_list'))
+async def btn_vip_list(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    
+    vip_users = await get_vip_users()
+    if not vip_users:
+        msg = await message.reply(get_text(user['language_code'], 'admin_vip_list_empty'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+        return
+        
+    text_lines = [f"💎 <b>VIP Користувачі ({len(vip_users)}):</b>\n"]
+    for v in vip_users:
+        uid = v['telegram_id']
+        name = v['full_name'] or "Без імені"
+        username = f"@{v['username']}" if v['username'] else "Без юзернейму"
+        tier = v['tier'].upper()
+        
+        try:
+            from core.utils import parse_db_date
+            from datetime import datetime, timezone
+            dt = parse_db_date(v['vip_until'])
+            formatted_date = dt.strftime("%Y-%m-%d %H:%M")
+            now = datetime.now(timezone.utc)
+            if dt.year == 9999:
+                days_left = "назавжди"
+            elif dt > now:
+                days_left = f"залишилось {(dt - now).days} дн."
+            else:
+                days_left = "минув"
+        except Exception:
+            formatted_date = v['vip_until'] or "Невідомо"
+            days_left = "?"
+            
+        line = f"👤 <a href='tg://user?id={uid}'>{name}</a> ({username}) | <code>{uid}</code>\n└ {tier} до {formatted_date} ({days_left})\n"
+        text_lines.append(line)
+        
+    full_text = "\n".join(text_lines)
+    
+    if len(full_text) > 4000:
+        import io
+        from aiogram.types import BufferedInputFile
+        file_content = full_text.encode('utf-8')
+        doc = BufferedInputFile(file_content, filename="vip_list.txt")
+        await message.reply_document(document=doc, caption=f"Всього VIP: {len(vip_users)}")
+    else:
+        await message.reply(full_text, parse_mode="HTML")
 
 # --- Ban Bot ---
 @admin_router.message(text_matches('admin_btn_ban_bot'))
