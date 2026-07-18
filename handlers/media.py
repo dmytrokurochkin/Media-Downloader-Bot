@@ -13,7 +13,8 @@ from aiogram import Router, F, Bot
 from aiogram.types import (
     Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo, 
     InputMediaAudio, InputMediaDocument, InlineQueryResultCachedVideo,
-    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent
+    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent,
+    InlineKeyboardMarkup, InlineKeyboardButton
 )
 
 from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS
@@ -284,6 +285,64 @@ async def youtube_callback(callback: CallbackQuery):
         
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
     await start_download(callback.message, url, format_spec, user, is_callback=True)
+
+@media_router.callback_query(F.data == "article_pdf")
+async def article_pdf_callback(callback: CallbackQuery):
+    await callback.answer()
+    
+    text_parts = callback.message.text.split("🔗 ")
+    if len(text_parts) < 2:
+        await callback.message.edit_text("⚠️ Не вдалося знайти посилання.")
+        return
+    url = text_parts[1].strip()
+    
+    user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+    tier = user.get('tier', 'free')
+    
+    if tier not in ['pro', 'Max']:
+        msg = await callback.message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        return
+        
+    await callback.message.edit_text("⏳ Завантажую та генерую PDF-документ...")
+    
+    try:
+        from core.pdf_generator import generate_article_pdf
+        from core.utils import temporary_download_session
+        import time
+        from pathlib import Path
+        
+        session_dir = Path(f"downloads/pdf_{time.time_ns()}")
+        
+        async with temporary_download_session(session_dir):
+            output_path = session_dir / "article.pdf"
+            pdf_path, title = await generate_article_pdf(url, output_path)
+            
+            if pdf_path and pdf_path.exists():
+                safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
+                if not safe_title:
+                    safe_title = "Article"
+                    
+                fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
+                caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
+                
+                await bot.send_document(
+                    chat_id=callback.message.chat.id,
+                    document=fs_file,
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+                try:
+                    await callback.message.delete()
+                except Exception:
+                    pass
+            else:
+                raise Exception("PDF файл не згенеровано.")
+    except Exception as e:
+        err_str = str(e)
+        if len(err_str) > 500:
+            err_str = err_str[:500] + "..."
+        await callback.message.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):
@@ -616,6 +675,18 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             
         if len(error_msg) > 3000:
             error_msg = error_msg[:3000] + "...\n[Error truncated]"
+            
+        if "unsupported url" in error_msg.lower():
+            try:
+                markup = InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="📄 Зберегти як PDF", callback_data="article_pdf")
+                ]])
+                text = f"⚠️ Не знайдено відео чи аудіо за цим посиланням. Можливо, це текстова стаття? Бажаєте зберегти її як PDF для читання офлайн?\n\n🔗 {url}"
+                await bot.edit_message_text(text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, reply_markup=markup)
+            except Exception:
+                pass
+            return
+            
         try:
             await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
             asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
