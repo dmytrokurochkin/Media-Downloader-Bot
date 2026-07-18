@@ -25,8 +25,8 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     
     # Fetch Leaderboards
     top_users_data = await get_top_users(limit=10)
-    # Format: Name:Count,Name:Count
-    tu_str = ",".join([f"{u.get('full_name', 'User').replace(',', '').replace(':', '')}:{u['count']}" for u in top_users_data])
+    # Format: ID:Name:Count,ID:Name:Count
+    tu_str = ",".join([f"{u.get('telegram_id')}:{u.get('full_name', 'User').replace(',', '').replace(':', '')}:{u['count']}" for u in top_users_data])
     
     top_sites_data = await get_top_domains()
     domain_mapping = {
@@ -82,7 +82,8 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'gq': guest_yt_quality,
         'anon': is_anonymous,
         'th': theme,
-        'wp': watermark_position
+        'wp': watermark_position,
+        'api': 'http://127.0.0.1:8080/api'
     }
     
     # URL Encode the parameters safely

@@ -61,6 +61,8 @@ async def init_db():
             await db.execute('ALTER TABLE users ADD COLUMN watermark_file_id TEXT DEFAULT NULL')
         if 'watermark_position' not in columns:
             await db.execute("ALTER TABLE users ADD COLUMN watermark_position TEXT DEFAULT 'bottom_right'")
+        if 'total_bytes_downloaded' not in columns:
+            await db.execute("ALTER TABLE users ADD COLUMN total_bytes_downloaded INTEGER DEFAULT 0")
     
     # Таблиця історії завантажень (аналітика)
     await db.execute('''
@@ -77,8 +79,21 @@ async def init_db():
         )
     ''')
     
+    # Таблиця бейджів користувачів
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS user_badges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_id INTEGER,
+            badge_code VARCHAR(50),
+            awarded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (telegram_id) REFERENCES users (telegram_id),
+            UNIQUE(telegram_id, badge_code)
+        )
+    ''')
+    
     # Індекси для оптимізації швидкодії
     await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_daily ON downloads(telegram_id, timestamp);')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_user_badges ON user_badges(telegram_id);')
     
     await db.commit()
 
@@ -250,10 +265,10 @@ async def get_top_users(limit: int = 10) -> List[dict]:
     """Повертає лідерборд користувачів за кількістю завантажень"""
     global _db_connection
     async with _db_connection.execute('''
-        SELECT u.full_name, u.username, COUNT(d.id) as count
+        SELECT u.telegram_id, u.full_name, u.username, COUNT(d.id) as count
         FROM users u
         JOIN downloads d ON u.telegram_id = d.telegram_id
-        WHERE d.success = 1
+        WHERE d.success = 1 AND u.is_anonymous = 0
         GROUP BY u.telegram_id
         ORDER BY count DESC
         LIMIT ?
@@ -315,3 +330,86 @@ async def get_vip_users() -> List[dict]:
     ''') as cursor:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+# --- Gamification Methods ---
+
+async def add_downloaded_bytes(telegram_id: int, bytes_downloaded: int):
+    global _db_connection
+    await _db_connection.execute('''
+        UPDATE users 
+        SET total_bytes_downloaded = total_bytes_downloaded + ? 
+        WHERE telegram_id = ?
+    ''', (bytes_downloaded, telegram_id))
+    await _db_connection.commit()
+
+async def get_user_badges(telegram_id: int) -> List[str]:
+    global _db_connection
+    async with _db_connection.execute('''
+        SELECT badge_code FROM user_badges WHERE telegram_id = ?
+    ''', (telegram_id,)) as cursor:
+        rows = await cursor.fetchall()
+        return [r['badge_code'] for r in rows]
+
+async def award_badge(telegram_id: int, badge_code: str) -> bool:
+    """Awards a badge. Returns True if awarded (was new), False if already had it."""
+    global _db_connection
+    try:
+        await _db_connection.execute('''
+            INSERT INTO user_badges (telegram_id, badge_code)
+            VALUES (?, ?)
+        ''', (telegram_id, badge_code))
+        await _db_connection.commit()
+        return True
+    except aiosqlite.IntegrityError:
+        # User already has this badge (UNIQUE constraint failed)
+        return False
+
+async def search_users_query(query_string: str) -> List[dict]:
+    """Searches public users by name, username, or ID."""
+    global _db_connection
+    search_term = f"%{query_string}%"
+    async with _db_connection.execute('''
+        SELECT telegram_id, username, full_name, tier, total_bytes_downloaded 
+        FROM users 
+        WHERE is_anonymous = 0 
+        AND (full_name LIKE ? OR username LIKE ? OR CAST(telegram_id AS TEXT) = ?)
+        LIMIT 20
+    ''', (search_term, search_term, query_string)) as cursor:
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+async def get_public_profile(telegram_id: int) -> Optional[dict]:
+    """Gets a public profile. Returns None if hidden or not found."""
+    profile = await get_user_stats(telegram_id)
+    if not profile or profile.get('is_anonymous'):
+        return None
+    return profile
+
+async def get_user_stats(telegram_id: int) -> Optional[dict]:
+    """Gets all user stats regardless of anonymity."""
+    global _db_connection
+    async with _db_connection.execute('''
+        SELECT telegram_id, username, full_name, tier, total_bytes_downloaded, is_anonymous
+        FROM users 
+        WHERE telegram_id = ?
+    ''', (telegram_id,)) as cursor:
+        user_row = await cursor.fetchone()
+        
+    if not user_row:
+        return None
+        
+    # Get total download count
+    async with _db_connection.execute('''
+        SELECT COUNT(*) FROM downloads WHERE telegram_id = ? AND success = 1
+    ''', (telegram_id,)) as cursor:
+        count_row = await cursor.fetchone()
+        downloads_count = count_row[0] if count_row else 0
+        
+    badges = await get_user_badges(telegram_id)
+    
+    profile = dict(user_row)
+    profile['downloads_count'] = downloads_count
+    profile['badges'] = badges
+    
+    return profile
+

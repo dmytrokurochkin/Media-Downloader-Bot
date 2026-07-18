@@ -18,10 +18,11 @@ from aiogram.types import (
 
 from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS
 from core.loader import bot
-from database import get_or_create_user, get_daily_download_count, add_download_record
+from database import get_or_create_user, get_daily_download_count, add_download_record, add_downloaded_bytes
 from downloader import download_media
 from locales import get_text
 from keyboards.inline import get_youtube_keyboard
+from core.badges import check_and_award_badges
 
 from aiogram.fsm.state import State, StatesGroup
 
@@ -649,6 +650,10 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         else:
             await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
             
+        if success:
+            await add_downloaded_bytes(user['telegram_id'], file_size)
+            await check_and_award_badges(user['telegram_id'])
+            
         if success and not is_guest_mode and message.chat.type == "private":
             try:
                 from core.webapp import generate_webapp_url
@@ -731,6 +736,8 @@ async def process_smart_trim(message: Message, user: dict, url: str, start_sec: 
                         
                         # Add stats
                         await add_download_record(user['telegram_id'], url, "smart_trim", "", file_size, True)
+                        await add_downloaded_bytes(user['telegram_id'], file_size)
+                        await check_and_award_badges(user['telegram_id'])
                         
                         try:
                             await status_msg.delete()

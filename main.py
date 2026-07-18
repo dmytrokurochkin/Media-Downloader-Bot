@@ -45,6 +45,17 @@ async def main():
     allowed = dp.resolve_used_update_types()
     if "guest_message" not in allowed:
         allowed.append("guest_message")
+        
+    # Запуск aiohttp сервера
+    from core.api import create_api_app
+    from aiohttp import web
+    app = create_api_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    await site.start()
+    logging.info("API Server started on http://0.0.0.0:8080")
+    
     await dp.start_polling(bot, allowed_updates=allowed)
 
 if __name__ == '__main__':

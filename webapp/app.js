@@ -21,6 +21,13 @@ const topSitesStr = urlParams.get('ts') || '';
 const botUsername = urlParams.get('b') || '';
 const userNameParam = urlParams.get('nm') || '';
 const vipUntilTs = parseInt(urlParams.get('vu') || '0');
+const apiUrl = urlParams.get('api') || 'http://127.0.0.1:8080/api';
+
+const BADGE_ICONS = {
+    'first_blood': '🩸',
+    'heavy_lifter': '🏋️‍♂️',
+    'night_owl': '🦉'
+};
 
 // Settings params
 const currentGuestQuality = urlParams.get('gq') || 'best';
@@ -59,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTranslations();
     renderProfile();
     renderLeaderboards();
+    setupSearch();
     
     // Tell Telegram app is ready
     tg.ready();
@@ -399,9 +407,15 @@ function renderLeaderboards() {
         const users = topUsersStr.split(',');
         users.forEach((u, i) => {
             const parts = u.split(':');
-            if (parts.length === 2) {
+            if (parts.length === 3) {
                 const li = document.createElement('li');
-                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[0]}</span><span class="rank-value">${parts[1]} ${getText(lang, 'downloads_count')}</span>`;
+                li.style.cursor = 'pointer';
+                li.onclick = () => openProfileModal(parts[0]);
+                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[1]}</span><span class="rank-value">${parts[2]} ${getText(lang, 'downloads_count') || 'DL'}</span>`;
+                usersList.appendChild(li);
+            } else if (parts.length === 2) {
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[0]}</span><span class="rank-value">${parts[1]} ${getText(lang, 'downloads_count') || 'DL'}</span>`;
                 usersList.appendChild(li);
             }
         });
@@ -571,4 +585,101 @@ function submitAudioEditor() {
     };
     
     tg.sendData(JSON.stringify(payload));
+}
+
+// --- Gamification & Search Logic ---
+
+function setupSearch() {
+    const searchInput = document.getElementById('userSearchInput');
+    const resultsList = document.getElementById('searchResultsList');
+    let debounceTimer;
+
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(debounceTimer);
+        const query = e.target.value.trim();
+        
+        if (query.length < 2) {
+            resultsList.style.display = 'none';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}`);
+                if (!res.ok) throw new Error("Search failed");
+                const data = await res.json();
+                
+                resultsList.innerHTML = '';
+                if (data.results && data.results.length > 0) {
+                    data.results.forEach(user => {
+                        const li = document.createElement('li');
+                        li.style.cursor = 'pointer';
+                        li.onclick = () => openProfileModal(user.telegram_id);
+                        li.innerHTML = `<span style="flex: 1;">${user.full_name} (@${user.username || 'user'})</span><span class="rank-value">${user.tier}</span>`;
+                        resultsList.appendChild(li);
+                    });
+                    resultsList.style.display = 'block';
+                } else {
+                    resultsList.innerHTML = '<li style="text-align:center; opacity: 0.7;">Не знайдено</li>';
+                    resultsList.style.display = 'block';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }, 500);
+    });
+}
+
+async function openProfileModal(userId) {
+    triggerHaptic('medium');
+    try {
+        const res = await fetch(`${apiUrl}/get_profile?id=${userId}`);
+        if (!res.ok) {
+            const data = await res.json();
+            tg.showAlert(data.error || "Профіль приховано або не знайдено");
+            return;
+        }
+        
+        const data = await res.json();
+        const profile = data.profile;
+        
+        document.getElementById('modalUserName').innerText = profile.full_name;
+        document.getElementById('modalUserTier').innerText = getText(lang, 'tier_' + profile.tier) || profile.tier;
+        document.getElementById('modalDownloads').innerText = profile.downloads_count;
+        
+        const mb = Math.round(profile.total_bytes_downloaded / (1024 * 1024));
+        if (mb >= 1024) {
+            document.getElementById('modalTraffic').innerText = (mb / 1024).toFixed(2) + ' GB';
+        } else {
+            document.getElementById('modalTraffic').innerText = mb + ' MB';
+        }
+        
+        const badgesGrid = document.getElementById('modalBadgesGrid');
+        badgesGrid.innerHTML = '';
+        if (profile.badges && profile.badges.length > 0) {
+            profile.badges.forEach(b => {
+                const icon = BADGE_ICONS[b] || '🏆';
+                const el = document.createElement('div');
+                el.style.fontSize = '2rem';
+                el.style.textAlign = 'center';
+                el.title = b;
+                el.innerText = icon;
+                badgesGrid.appendChild(el);
+            });
+        } else {
+            badgesGrid.innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Немає бейджів</span>';
+        }
+        
+        document.getElementById('publicProfileModal').style.display = 'block';
+    } catch (err) {
+        console.error(err);
+        tg.showAlert("Помилка завантаження профілю.");
+    }
+}
+
+function closeProfileModal() {
+    triggerHaptic('light');
+    document.getElementById('publicProfileModal').style.display = 'none';
 }
