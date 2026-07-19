@@ -27,15 +27,9 @@ async def handle_media_error(e: Exception, bot, status_msg, url: str, user: dict
         error_msg = error_msg[:3000] + "...\n[Error truncated]"
         
     if "unsupported url" in error_msg.lower():
-        try:
-            markup = InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="📄 Зберегти як PDF", callback_data="article_pdf")
-            ]])
-            text = f"⚠️ Не знайдено відео чи аудіо за цим посиланням. Можливо, це текстова стаття? Бажаєте зберегти її як PDF для читання офлайн?\n\n🔗 {url}"
-            await bot.edit_message_text(text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, reply_markup=markup)
-        except Exception:
-            pass
-        return
+        # User requested to completely remove PDF generation from here
+        pass
+
         
     try:
         await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)

@@ -87,7 +87,7 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
     downloaded_files.sort(key=lambda x: x.stat().st_mtime)
     return downloaded_files
 
-async def download_github(url: str, progress_callback=None) -> Path:
+async def download_github(url: str, session_dir: Path, progress_callback=None) -> Path:
     """
     Парсить посилання на GitHub та завантажує .zip архів репозиторію.
     Спочатку перевіряє гілку main, потім (якщо 404) перевіряє гілку master.
@@ -106,21 +106,20 @@ async def download_github(url: str, progress_callback=None) -> Path:
         # Спочатку пробуємо гілку main
         async with session.get(main_url) as resp:
             if resp.status == 200:
-                return await _download_file(resp, f"{repo}_main.zip", progress_callback)
+                return await _download_file(resp, session_dir / f"{repo}_main.zip", progress_callback)
             
         # Якщо main не знайдено, пробуємо master
         async with session.get(master_url) as resp:
             if resp.status == 200:
-                return await _download_file(resp, f"{repo}_master.zip", progress_callback)
+                return await _download_file(resp, session_dir / f"{repo}_master.zip", progress_callback)
                 
     raise Exception("Не вдалося знайти гілку main або master (отримано 404).")
 
-async def _download_file(response, filename: str, progress_callback) -> Path:
+async def _download_file(response, filepath: Path, progress_callback) -> Path:
     """
     Внутрішня функція для асинхронного завантаження файлу по шматках з трекінгом прогресу.
     """
     total_size = int(response.headers.get('content-length', 0))
-    filepath = Path(filename)
     
     with open(filepath, 'wb') as f:
         downloaded = 0
@@ -476,7 +475,7 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
         if tier == 'free':
             # We can't easily check github zip size before download, so we just allow it or reject big ones later.
             pass
-        return await download_github(url, progress_callback)
+        return await download_github(url, session_dir, progress_callback)
 
     try:
         # Запускаємо синхронну yt-dlp функцію в ThreadPool, 

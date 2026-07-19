@@ -103,6 +103,16 @@ LOCALES = {
         "admin_ban_support_prompt": "Введіть ID користувача та кількість днів (опціонально).\nЯкщо без днів - бан назавжди.\nПриклад: `123456789 7` або `123456789`",
         "admin_unban_prompt": "Введіть ID користувача для зняття всіх банів:\nПриклад: `123456789`",
         "too_fast": "⚠️ Занадто швидко!",
+        "admin_btn_ads": "📢 Реклама",
+        "admin_btn_add_ad": "➕ Додати рекламу",
+        "admin_btn_test_ad": "🧪 Тест реклами",
+        "admin_btn_clear_ads": "❌ Вимкнути рекламу",
+        "menu_save_pdf": "📄 Зберегти як PDF",
+        "admin_ad_prompt": "Надішліть текст для реклами у форматі HTML:",
+        "admin_ad_added": "✅ Рекламну кампанію активовано!\nТекст:\n{text}",
+        "admin_ad_cleared": "✅ Усі рекламні кампанії вимкнено.",
+        "admin_ad_not_found": "❌ Немає активної реклами.",
+        "user_pdf_prompt": "Надішліть посилання на статтю, яку потрібно зберегти як PDF:"
     },
     "en": {
         "start": "👋 <b>Hello! I am your personal fast media downloader!</b>\n\nI can download photos, videos and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and more info!",
@@ -205,6 +215,16 @@ LOCALES = {
         "admin_ban_support_prompt": "Enter user ID and number of days (optional).\nIf without days - permanent ban.\nExample: `123456789 7` or `123456789`",
         "admin_unban_prompt": "Enter user ID to remove all bans:\nExample: `123456789`",
         "too_fast": "⚠️ Too fast!",
+        "admin_btn_ads": "📢 Ads",
+        "admin_btn_add_ad": "➕ Add Ad",
+        "admin_btn_test_ad": "🧪 Test Ad",
+        "admin_btn_clear_ads": "❌ Disable Ads",
+        "menu_save_pdf": "📄 Save as PDF",
+        "admin_ad_prompt": "Send ad text in HTML format:",
+        "admin_ad_added": "✅ Ad campaign activated!\nText:\n{text}",
+        "admin_ad_cleared": "✅ All ad campaigns disabled.",
+        "admin_ad_not_found": "❌ No active ad.",
+        "user_pdf_prompt": "Send the link to the article you want to save as PDF:"
     },
     "pl": {
         "start": "👋 <b>Cześć! Jestem twoim osobistym szybkim downloaderem multimediów!</b>\n\nPotrafię pobierać zdjęcia, filmy i dźwięk z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej, aby uzyskać ustawienia i więcej informacji!",
@@ -308,6 +328,16 @@ LOCALES = {
         "admin_ban_support_prompt": "Wprowadź ID użytkownika i liczbę dni (opcjonalnie).\nJeśli bez dni - permanentny ban.\nPrzykład: `123456789 7` lub `123456789`",
         "admin_unban_prompt": "Wprowadź ID użytkownika, aby usunąć wszystkie bany:\nPrzykład: `123456789`",
         "too_fast": "⚠️ Zbyt szybko!",
+        "admin_btn_ads": "📢 Reklama",
+        "admin_btn_add_ad": "➕ Dodaj reklamę",
+        "admin_btn_test_ad": "🧪 Test reklamy",
+        "admin_btn_clear_ads": "❌ Wyłącz reklamy",
+        "menu_save_pdf": "📄 Zapisz jako PDF",
+        "admin_ad_prompt": "Wyślij tekst reklamy w formacie HTML:",
+        "admin_ad_added": "✅ Kampania reklamowa aktywna!\nTekst:\n{text}",
+        "admin_ad_cleared": "✅ Wszystkie kampanie reklamowe wyłączone.",
+        "admin_ad_not_found": "❌ Brak aktywnej reklamy.",
+        "user_pdf_prompt": "Wyślij link do artykułu, który chcesz zapisać jako PDF:"
     }
 }
 

@@ -388,32 +388,54 @@ async def process_unban(message: Message, state: FSMContext):
         await message.reply(get_text(user['language_code'], 'admin_err_id'))
 
 # --- Ads Management ---
-@admin_router.message(Command("set_ad"))
-async def cmd_set_ad(message: Message, state: FSMContext):
+class AdState(StatesGroup):
+    waiting_for_ad_text = State()
+
+@admin_router.message(text_matches('admin_btn_ads'))
+async def btn_ads_menu(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        await message.reply("Використання: /set_ad <текст у HTML або MarkdownV2>")
-        return
-    ad_text = args[1]
+    from keyboards.reply import get_admin_ad_keyboard
+    msg = await message.reply("📢 Управління рекламою:", reply_markup=get_admin_ad_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+
+@admin_router.message(text_matches('admin_btn_add_ad'))
+async def btn_add_ad(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    if not is_admin(message.from_user.id): return
+    msg = await message.reply(get_text(user['language_code'], 'admin_ad_prompt'), reply_markup=get_admin_cancel_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+    await state.set_state(AdState.waiting_for_ad_text)
+
+@admin_router.message(AdState.waiting_for_ad_text)
+async def process_add_ad(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    ad_text = message.text
     from database import set_active_ad
     await set_active_ad(ad_text)
-    await message.reply(f"✅ Рекламну кампанію активовано!\nТекст:\n{ad_text}", parse_mode=None)
+    from keyboards.reply import get_admin_ad_keyboard
+    await message.reply(get_text(user['language_code'], 'admin_ad_added', text=ad_text), parse_mode=None, reply_markup=get_admin_ad_keyboard(user['language_code']))
+    await state.clear()
 
-@admin_router.message(Command("clear_ad"))
-async def cmd_clear_ad(message: Message):
+@admin_router.message(text_matches('admin_btn_clear_ads'))
+async def btn_clear_ads(message: Message):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
     from database import clear_active_ads
     await clear_active_ads()
-    await message.reply("✅ Усі рекламні кампанії вимкнено.")
+    await message.reply(get_text(user['language_code'], 'admin_ad_cleared'))
 
-@admin_router.message(Command("test_ad"))
-async def cmd_test_ad(message: Message):
+@admin_router.message(text_matches('admin_btn_test_ad'))
+async def btn_test_ad(message: Message):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     if not is_admin(message.from_user.id): return
     from database import get_active_ad
     ad_text = await get_active_ad()
     if not ad_text:
-        await message.reply("❌ Немає активної реклами.")
+        await message.reply(get_text(user['language_code'], 'admin_ad_not_found'))
         return
     
     caption = "Оригінальний підпис до медіа."

@@ -286,25 +286,36 @@ async def youtube_callback(callback: CallbackQuery):
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
     await start_download(callback.message, url, format_spec, user, is_callback=True)
 
-@media_router.callback_query(F.data == "article_pdf")
-async def article_pdf_callback(callback: CallbackQuery):
-    await callback.answer()
+class PdfState(StatesGroup):
+    waiting_for_pdf_url = State()
+
+def text_matches(key: str):
+    from locales import get_text
+    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
+
+@media_router.message(text_matches('menu_save_pdf'))
+async def btn_save_pdf(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    tier = user.get('tier', 'free').lower()
     
-    text_parts = callback.message.text.split("🔗 ")
-    if len(text_parts) < 2:
-        await callback.message.edit_text("⚠️ Не вдалося знайти посилання.")
-        return
-    url = text_parts[1].strip()
-    
-    user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
-    tier = user.get('tier', 'free')
-    
-    if tier not in ['pro', 'Max']:
-        msg = await callback.message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
+    if tier not in ['pro', 'max']:
+        msg = await message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
         asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         return
         
-    await callback.message.edit_text("⏳ Завантажую та генерую PDF-документ...")
+    msg = await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
+    await state.set_state(PdfState.waiting_for_pdf_url)
+
+@media_router.message(PdfState.waiting_for_pdf_url)
+async def process_pdf_url(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    url = message.text.strip()
+    if not url.startswith('http'):
+        await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
+        return
+        
+    await state.clear()
+    status_msg = await message.reply("⏳ Завантажую та генерую PDF-документ...")
     
     try:
         from core.pdf_generator import generate_article_pdf
@@ -323,17 +334,18 @@ async def article_pdf_callback(callback: CallbackQuery):
                 if not safe_title:
                     safe_title = "Article"
                     
+                from aiogram.types import FSInputFile
                 fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
                 caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
                 
                 await bot.send_document(
-                    chat_id=callback.message.chat.id,
+                    chat_id=message.chat.id,
                     document=fs_file,
                     caption=caption,
                     parse_mode="HTML"
                 )
                 try:
-                    await callback.message.delete()
+                    await status_msg.delete()
                 except Exception:
                     pass
             else:
@@ -342,7 +354,8 @@ async def article_pdf_callback(callback: CallbackQuery):
         err_str = str(e)
         if len(err_str) > 500:
             err_str = err_str[:500] + "..."
-        await callback.message.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
+        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
+
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):

@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSearch();
     
     // Apply current theme
-    document.documentElement.setAttribute('data-theme', currentTheme);
+    document.body.setAttribute('data-theme', currentTheme);
     
     // Tell Telegram app is ready
     tg.ready();
@@ -629,7 +629,7 @@ function setupSearch() {
 
         debounceTimer = setTimeout(async () => {
             try {
-                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}`);
+                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}&initData=${encodeURIComponent(tg.initData || '')}`);
                 if (!res.ok) throw new Error("Search failed");
                 const data = await res.json();
                 
@@ -649,6 +649,8 @@ function setupSearch() {
                 }
             } catch (err) {
                 console.error(err);
+                resultsList.innerHTML = '<li style="text-align:center; opacity: 0.7; color: red;">Помилка завантаження</li>';
+                resultsList.style.display = 'block';
             }
         }, 500);
     });
@@ -657,10 +659,14 @@ function setupSearch() {
 async function openProfileModal(userId) {
     triggerHaptic('medium');
     try {
-        const res = await fetch(`${apiUrl}/get_profile?id=${userId}`);
+        const res = await fetch(`${apiUrl}/get_profile?id=${userId}&initData=${encodeURIComponent(tg.initData || '')}`);
         if (!res.ok) {
-            const data = await res.json();
-            tg.showAlert(data.error || "Профіль приховано або не знайдено");
+            let errorMsg = "Профіль приховано або не знайдено";
+            try {
+                const data = await res.json();
+                if (data.error) errorMsg = data.error;
+            } catch (e) {}
+            tg.showAlert(errorMsg);
             return;
         }
         

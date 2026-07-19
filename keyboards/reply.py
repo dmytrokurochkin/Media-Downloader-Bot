@@ -16,14 +16,16 @@ def get_main_keyboard(lang: str, webapp_url: str = None) -> ReplyKeyboardMarkup:
     builder.button(text=get_text(lang, 'menu_vip'))
     builder.button(text=get_text(lang, 'menu_settings'))
     builder.button(text=get_text(lang, 'menu_help'))
+    builder.button(text=get_text(lang, 'menu_save_pdf'))
     builder.button(text=get_text(lang, 'menu_hide_keyboard'))
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2, 2, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_keyboard(lang: str) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text=get_text(lang, 'admin_btn_broadcast'))
     builder.button(text=get_text(lang, 'admin_btn_reply'))
+    builder.button(text=get_text(lang, 'admin_btn_ads'))
     builder.button(text=get_text(lang, 'admin_btn_give_vip'))
     builder.button(text=get_text(lang, 'admin_btn_revoke_vip'))
     builder.button(text=get_text(lang, 'admin_btn_vip_list'))
@@ -31,10 +33,20 @@ def get_admin_keyboard(lang: str) -> ReplyKeyboardMarkup:
     builder.button(text=get_text(lang, 'admin_btn_ban_support'))
     builder.button(text=get_text(lang, 'admin_btn_unban'))
     builder.button(text=get_text(lang, 'admin_btn_exit'))
-    builder.adjust(2, 3, 3, 1)
+    builder.adjust(2, 3, 3, 1, 1)
+    return builder.as_markup(resize_keyboard=True)
+
+def get_admin_ad_keyboard(lang: str) -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.button(text=get_text(lang, 'admin_btn_add_ad'))
+    builder.button(text=get_text(lang, 'admin_btn_test_ad'))
+    builder.button(text=get_text(lang, 'admin_btn_clear_ads'))
+    builder.button(text=get_text(lang, 'admin_btn_cancel'))
+    builder.adjust(2, 1, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_cancel_keyboard(lang: str) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text=get_text(lang, 'admin_btn_cancel'))
     return builder.as_markup(resize_keyboard=True)
+
