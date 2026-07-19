@@ -206,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Prevent swipe if vertical scrolling was dominant
         if (Math.abs(deltaX) > deltaY && Math.abs(deltaX) > swipeThreshold) {
-            const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'settings'];
+            const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'audio-editor', 'settings'];
             let currentIndex = 0;
             document.querySelectorAll('.section').forEach((sec, idx) => {
                 if (sec.classList.contains('active')) currentIndex = idx;
@@ -266,6 +266,10 @@ function applyTranslations() {
     
     const tabClipperEl = document.getElementById('tab_clipper');
     if (tabClipperEl) tabClipperEl.innerText = getText(lang, 'title_clipper');
+    const tabAudioEditorEl = document.getElementById('tab_audio_editor');
+    if (tabAudioEditorEl) tabAudioEditorEl.innerText = getText(lang, 'title_audio_editor');
+    
+    document.getElementById('pageTitle').innerText = getText(lang, 'title_profile');
     
     // Settings translations
     const labelSettingsMain = document.getElementById('label_settings_main');
@@ -805,7 +809,7 @@ function initCustomSelects() {
 }
 
 function updateNavVisibility() {
-    const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'settings'];
+    const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'audio-editor', 'settings'];
     let currentIndex = 0;
     document.querySelectorAll('.section').forEach((sec, idx) => {
         if (sec.classList.contains('active')) currentIndex = idx;

@@ -1,8 +1,7 @@
 import urllib.parse
 import datetime
 from database import get_top_users, get_top_domains
-from database import get_top_users, get_top_domains
-from core.config import TIER_LIMITS, ADMIN_IDS
+from core.config import TIER_LIMITS, ADMIN_IDS, PUBLIC_API_URL
 
 async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str) -> str:
     """
@@ -88,7 +87,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'th': theme,
         'ow': owned_themes,
         'wp': watermark_position,
-        'api': 'http://127.0.0.1:8080/api'
+        'api': PUBLIC_API_URL
     }
     
     # URL Encode the parameters safely
