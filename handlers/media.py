@@ -139,6 +139,76 @@ async def guest_text_handler(message: Message):
         
     await process_url(message, url, user, is_guest_mode=True)
 
+class PdfState(StatesGroup):
+    waiting_for_pdf_url = State()
+
+def text_matches(key: str):
+    from locales import get_text
+    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
+
+@media_router.message(text_matches('menu_save_pdf'))
+async def btn_save_pdf(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    tier = user.get('tier', 'free').lower()
+    
+    if tier not in ['pro', 'max']:
+        msg = await message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        return
+        
+    msg = await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
+    await state.set_state(PdfState.waiting_for_pdf_url)
+
+@media_router.message(PdfState.waiting_for_pdf_url)
+async def process_pdf_url(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    url = message.text.strip()
+    if not url.startswith('http'):
+        await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
+        return
+        
+    await state.clear()
+    status_msg = await message.reply("⏳ Завантажую та генерую PDF-документ...")
+    
+    try:
+        from core.pdf_generator import generate_article_pdf
+        from core.utils import temporary_download_session
+        import time
+        from pathlib import Path
+        
+        session_dir = Path(f"downloads/pdf_{time.time_ns()}")
+        
+        async with temporary_download_session(session_dir):
+            output_path = session_dir / "article.pdf"
+            pdf_path, title = await generate_article_pdf(url, output_path)
+            
+            if pdf_path and pdf_path.exists():
+                safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
+                if not safe_title:
+                    safe_title = "Article"
+                    
+                from aiogram.types import FSInputFile
+                fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
+                caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
+                
+                await bot.send_document(
+                    chat_id=message.chat.id,
+                    document=fs_file,
+                    caption=caption,
+                    parse_mode="HTML"
+                )
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
+            else:
+                raise Exception("PDF файл не згенеровано.")
+    except Exception as e:
+        err_str = str(e)
+        if len(err_str) > 500:
+            err_str = err_str[:500] + "..."
+        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
+
 @media_router.message(F.text)
 async def text_handler(message: Message):
     bot_me = await bot.get_me()
@@ -654,19 +724,19 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
         if success and not is_guest_mode and message.chat.type == "private":
             try:
                 from core.webapp import generate_webapp_url
-                from aiogram.types import MenuButtonWebApp, WebAppInfo
+                from aiogram.types import MenuButtonDefault
                 
                 bot_info = await bot.get_me()
                 daily_count_updated = await get_daily_download_count(user['telegram_id'])
                 webapp_url = await generate_webapp_url(user, daily_count_updated, bot_info.username)
                 
-                await bot.set_chat_menu_button(
-                    chat_id=target_chat_id, 
-                    menu_button=MenuButtonWebApp(
-                        text=get_text(lang, 'menu_profile'), 
-                        web_app=WebAppInfo(url=webapp_url)
+                try:
+                    await bot.set_chat_menu_button(
+                        chat_id=target_chat_id, 
+                        menu_button=MenuButtonDefault()
                     )
-                )
+                except Exception:
+                    pass
             except Exception:
                 pass
 

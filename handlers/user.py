@@ -45,12 +45,14 @@ async def start_handler(message: Message, state: FSMContext):
     daily_count = await get_daily_download_count(message.from_user.id)
     webapp_url = await generate_webapp_url(user, daily_count, bot_info.username)
     
-    # Set the Main Menu Web App Button
+    # Reset to default Menu Button to force users to use the Reply Keyboard WebApp button
+    # which correctly supports tg.sendData() for saving settings
     if message.chat.type == "private":
         try:
+            from aiogram.types import MenuButtonDefault
             await bot.set_chat_menu_button(
                 chat_id=message.chat.id, 
-                menu_button=MenuButtonWebApp(text=get_text(user['language_code'], 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+                menu_button=MenuButtonDefault()
             )
         except Exception as e:
             print("Failed to set menu button:", e)
@@ -256,9 +258,10 @@ async def language_callback(callback: CallbackQuery):
     
     if callback.message.chat.type == "private":
         try:
+            from aiogram.types import MenuButtonDefault
             await bot.set_chat_menu_button(
                 chat_id=callback.message.chat.id, 
-                menu_button=MenuButtonWebApp(text=get_text(lang_code, 'menu_profile'), web_app=WebAppInfo(url=webapp_url))
+                menu_button=MenuButtonDefault()
             )
         except: pass
         reply_markup = get_main_keyboard(lang_code, webapp_url)

@@ -113,6 +113,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const selWatermarkPos = document.getElementById('settings_watermark_pos');
     if (selWatermarkPos) selWatermarkPos.value = currentWatermarkPos;
     
+    // Initialize custom dropdowns
+    if (typeof initCustomSelects === 'function') {
+        initCustomSelects();
+    }
+    
     // Interactive spotlight and prism effect
     const updateCursorPos = (e) => {
         let clientX = e.clientX;
@@ -710,4 +715,83 @@ async function openProfileModal(userId) {
 function closeProfileModal() {
     triggerHaptic('light');
     document.getElementById('publicProfileModal').style.display = 'none';
+}
+
+function initCustomSelects() {
+    const selects = document.querySelectorAll('select.glass-input');
+    selects.forEach(select => {
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'custom-select-wrapper';
+        select.parentNode.insertBefore(wrapper, select);
+        wrapper.appendChild(select);
+        
+        // Hide original select
+        select.style.display = 'none';
+        
+        // Create trigger
+        const trigger = document.createElement('div');
+        trigger.className = 'custom-select-trigger glass-input';
+        
+        // Find selected option
+        let selectedOption = select.options[select.selectedIndex];
+        if (!selectedOption && select.options.length > 0) {
+            selectedOption = select.options[0];
+        }
+        trigger.innerHTML = `<span>${selectedOption ? selectedOption.text : ''}</span><div class="arrow"></div>`;
+        wrapper.appendChild(trigger);
+        
+        // Create options container
+        const optionsContainer = document.createElement('div');
+        optionsContainer.className = 'custom-select-options glass';
+        
+        Array.from(select.options).forEach(option => {
+            const optDiv = document.createElement('div');
+            optDiv.className = 'custom-select-option';
+            optDiv.dataset.value = option.value;
+            optDiv.textContent = option.text;
+            
+            if (option.selected) optDiv.classList.add('selected');
+            
+            optDiv.addEventListener('click', function(e) {
+                // Update original select
+                select.value = this.dataset.value;
+                // Dispatch change event
+                select.dispatchEvent(new Event('change'));
+                
+                // Update trigger text
+                trigger.querySelector('span').textContent = this.textContent;
+                
+                // Update selected class
+                optionsContainer.querySelectorAll('.custom-select-option').forEach(el => el.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                // Close dropdown
+                wrapper.classList.remove('open');
+                triggerHaptic('light');
+            });
+            
+            optionsContainer.appendChild(optDiv);
+        });
+        
+        wrapper.appendChild(optionsContainer);
+        
+        // Toggle dropdown
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            
+            // Close other open selects
+            document.querySelectorAll('.custom-select-wrapper').forEach(w => {
+                if (w !== wrapper) w.classList.remove('open');
+            });
+            
+            wrapper.classList.toggle('open');
+            triggerHaptic('light');
+        });
+    });
+    
+    // Close on click outside
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
+    });
 }
