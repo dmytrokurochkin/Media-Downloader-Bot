@@ -175,15 +175,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let touchStartX = 0;
     let touchStartY = 0;
     let lastSwipeVibrateX = 0;
-    const swipeThreshold = 60; // minimum distance in px
+    const swipeThreshold = 40; // minimum distance in px
     
-    document.body.addEventListener('touchstart', (e) => {
+    document.addEventListener('touchstart', (e) => {
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
         lastSwipeVibrateX = 0;
     }, {passive: true});
     
-    document.body.addEventListener('touchmove', (e) => {
+    document.addEventListener('touchmove', (e) => {
         if (!touchStartX) return;
         const currentX = e.changedTouches[0].screenX;
         const currentY = e.changedTouches[0].screenY;
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, {passive: true});
 
-    document.body.addEventListener('touchend', (e) => {
+    document.addEventListener('touchend', (e) => {
         const touchEndX = e.changedTouches[0].screenX;
         const touchEndY = e.changedTouches[0].screenY;
         
@@ -227,6 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+    
+    if (typeof updateNavVisibility === 'function') {
+        updateNavVisibility();
+    }
 });
 
 function applyTranslations() {
@@ -478,6 +482,10 @@ function switchTab(tabId, btnElement) {
         triggerHaptic('heavy'); 
         setTimeout(() => triggerHaptic('medium'), 30);
     } catch(e){}
+    
+    if (typeof updateNavVisibility === 'function') {
+        updateNavVisibility();
+    }
 }
 
 function buyVip() {
@@ -793,5 +801,29 @@ function initCustomSelects() {
     // Close on click outside
     document.addEventListener('click', function() {
         document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
+    });
+}
+
+function updateNavVisibility() {
+    const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'settings'];
+    let currentIndex = 0;
+    document.querySelectorAll('.section').forEach((sec, idx) => {
+        if (sec.classList.contains('active')) currentIndex = idx;
+    });
+    
+    let startIdx = Math.max(0, currentIndex - 1);
+    let endIdx = startIdx + 2;
+    const navItems = document.querySelectorAll('.nav-item');
+    if (endIdx >= navItems.length) {
+        endIdx = navItems.length - 1;
+        startIdx = Math.max(0, endIdx - 2);
+    }
+    
+    navItems.forEach((item, idx) => {
+        if (idx >= startIdx && idx <= endIdx) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
     });
 }

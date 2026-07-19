@@ -540,6 +540,7 @@ body[data-theme="retro"] {
     max-width: 400px;
     display: flex;
     justify-content: space-around;
+    gap: 0.5rem;
     padding: 1rem;
     border-radius: 32px;
     z-index: 100;
@@ -550,7 +551,8 @@ body[data-theme="retro"] {
     border: none;
     color: var(--text-color);
     opacity: 0.5;
-    display: flex;
+    display: none; /* Controlled by JS */
+    flex: 1;
     flex-direction: column;
     align-items: center;
     gap: 4px;
@@ -760,7 +762,7 @@ body[data-theme="retro"] {
     max-height: 200px;
     overflow-y: auto;
     
-    background: var(--glass-bg);
+    background: var(--bg-color) !important;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
@@ -787,4 +789,26 @@ body[data-theme="retro"] {
 
 .custom-select-option:hover, .custom-select-option.selected {
     background: rgba(255, 255, 255, 0.15);
+}
+
+/* File Input Style */
+input[type="file"]::file-selector-button {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    margin-right: 1rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+input[type="file"]::file-selector-button:active {
+    transform: scale(0.95);
+}
+
+input[type="file"]::file-selector-button:hover {
+    opacity: 0.9;
 }
