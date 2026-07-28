@@ -1,6 +1,6 @@
 import urllib.parse
 import datetime
-from database import get_top_users, get_top_domains
+from database import get_top_users, get_top_domains, get_user_stats
 from core.config import TIER_LIMITS, ADMIN_IDS, PUBLIC_API_URL
 
 async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str) -> str:
