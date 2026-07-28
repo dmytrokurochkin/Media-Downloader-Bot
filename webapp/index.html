@@ -105,6 +105,72 @@
 
         </main>
 
+            <!-- Clipper Section -->
+            <section id="section-clipper" class="section">
+                <div class="card glass fade-in">
+                    <h3 id="label_clipper_main" class="section-title">Обрізка відео</h3>
+                    <p id="label_clipper_desc" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 1.5rem; text-align: left;">
+                        Завантажте лише потрібний фрагмент відео. Вкажіть посилання та час (MM:SS або HH:MM:SS). Free користувачі можуть обрізати фрагменти до 30 секунд.
+                    </p>
+                    
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_clipper_url" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Посилання на відео:</label>
+                        <input type="url" id="clipper_url" class="glass-input" placeholder="https://youtube.com/..." required style="padding: 0.75rem;">
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                        <div class="setting-row" style="flex: 1; text-align: left;">
+                            <label id="label_clipper_start" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Початок:</label>
+                            <input type="text" id="clipper_start" class="glass-input" placeholder="00:00" required style="padding: 0.75rem; text-align: center;">
+                        </div>
+                        <div class="setting-row" style="flex: 1; text-align: left;">
+                            <label id="label_clipper_end" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Кінець:</label>
+                            <input type="text" id="clipper_end" class="glass-input" placeholder="00:30" required style="padding: 0.75rem; text-align: center;">
+                        </div>
+                    </div>
+                    
+                    <button class="primary-btn pulse" onclick="submitSmartTrim()" id="btn_smart_trim">Завантажити фрагмент</button>
+                </div>
+            </section>
+            
+            <!-- Audio Editor Section -->
+            <section id="section-audio-editor" class="section">
+                <div class="card glass fade-in">
+                    <h3 id="label_audio_editor_main" class="section-title">Аудіо-редактор</h3>
+                    <p id="label_audio_editor_desc" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 1.5rem; text-align: left;">
+                        Змініть ID3-теги (Назва, Виконавець, Альбом) та встановіть власну обкладинку перед завантаженням. (Тільки для Pro/Max).
+                    </p>
+                    
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_editor_url" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Посилання на трек:</label>
+                        <input type="url" id="editor_url" class="glass-input" placeholder="https://music.youtube.com/..." required style="padding: 0.75rem;">
+                    </div>
+                    
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_editor_title" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Назва (Title):</label>
+                        <input type="text" id="editor_title" class="glass-input" placeholder="Назва треку" style="padding: 0.75rem;">
+                    </div>
+
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_editor_artist" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Виконавець (Artist):</label>
+                        <input type="text" id="editor_artist" class="glass-input" placeholder="Виконавець" style="padding: 0.75rem;">
+                    </div>
+
+                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
+                        <label id="label_editor_album" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Альбом (Album):</label>
+                        <input type="text" id="editor_album" class="glass-input" placeholder="Альбом" style="padding: 0.75rem;">
+                    </div>
+                    
+                    <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
+                        <label id="label_editor_cover" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Обкладинка (Cover Art):</label>
+                        <input type="file" id="editor_cover" accept="image/*" class="glass-input" style="padding: 0.5rem;">
+                        <span id="label_editor_cover_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Бот попросить надіслати фото в чат після натискання кнопки.</span>
+                    </div>
+                    
+                    <button class="primary-btn pulse" onclick="submitAudioEditor()" id="btn_audio_editor">Зберегти та завантажити</button>
+                </div>
+            </section>
+            
             <!-- Settings Section -->
             <section id="section-settings" class="section">
                 <div class="card glass fade-in">
@@ -179,72 +245,6 @@
                 </div>
             </section>
 
-            <!-- Clipper Section -->
-            <section id="section-clipper" class="section">
-                <div class="card glass fade-in">
-                    <h3 id="label_clipper_main" class="section-title">Обрізка відео</h3>
-                    <p id="label_clipper_desc" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 1.5rem; text-align: left;">
-                        Завантажте лише потрібний фрагмент відео. Вкажіть посилання та час (MM:SS або HH:MM:SS). Free користувачі можуть обрізати фрагменти до 30 секунд.
-                    </p>
-                    
-                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
-                        <label id="label_clipper_url" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Посилання на відео:</label>
-                        <input type="url" id="clipper_url" class="glass-input" placeholder="https://youtube.com/..." required style="padding: 0.75rem;">
-                    </div>
-                    
-                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-                        <div class="setting-row" style="flex: 1; text-align: left;">
-                            <label id="label_clipper_start" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Початок:</label>
-                            <input type="text" id="clipper_start" class="glass-input" placeholder="00:00" required style="padding: 0.75rem; text-align: center;">
-                        </div>
-                        <div class="setting-row" style="flex: 1; text-align: left;">
-                            <label id="label_clipper_end" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Кінець:</label>
-                            <input type="text" id="clipper_end" class="glass-input" placeholder="00:30" required style="padding: 0.75rem; text-align: center;">
-                        </div>
-                    </div>
-                    
-                    <button class="primary-btn pulse" onclick="submitSmartTrim()" id="btn_smart_trim">Завантажити фрагмент</button>
-                </div>
-            </section>
-            
-            <!-- Audio Editor Section -->
-            <section id="section-audio-editor" class="section">
-                <div class="card glass fade-in">
-                    <h3 id="label_audio_editor_main" class="section-title">Аудіо-редактор</h3>
-                    <p id="label_audio_editor_desc" style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 1.5rem; text-align: left;">
-                        Змініть ID3-теги (Назва, Виконавець, Альбом) та встановіть власну обкладинку перед завантаженням. (Тільки для Pro/Max).
-                    </p>
-                    
-                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
-                        <label id="label_editor_url" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Посилання на трек:</label>
-                        <input type="url" id="editor_url" class="glass-input" placeholder="https://music.youtube.com/..." required style="padding: 0.75rem;">
-                    </div>
-                    
-                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
-                        <label id="label_editor_title" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Назва (Title):</label>
-                        <input type="text" id="editor_title" class="glass-input" placeholder="Назва треку" style="padding: 0.75rem;">
-                    </div>
-
-                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
-                        <label id="label_editor_artist" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Виконавець (Artist):</label>
-                        <input type="text" id="editor_artist" class="glass-input" placeholder="Виконавець" style="padding: 0.75rem;">
-                    </div>
-
-                    <div class="setting-row" style="margin-bottom: 1rem; text-align: left;">
-                        <label id="label_editor_album" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Альбом (Album):</label>
-                        <input type="text" id="editor_album" class="glass-input" placeholder="Альбом" style="padding: 0.75rem;">
-                    </div>
-                    
-                    <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
-                        <label id="label_editor_cover" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Обкладинка (Cover Art):</label>
-                        <input type="file" id="editor_cover" accept="image/*" class="glass-input" style="padding: 0.5rem;">
-                        <span id="label_editor_cover_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Бот попросить надіслати фото в чат після натискання кнопки.</span>
-                    </div>
-                    
-                    <button class="primary-btn pulse" onclick="submitAudioEditor()" id="btn_audio_editor">Зберегти та завантажити</button>
-                </div>
-            </section>
-            
         <!-- Bottom Navigation -->
         <nav class="bottom-nav glass">
             <button class="nav-item active" id="nav-profile" onclick="switchTab('profile', this)">

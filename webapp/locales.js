@@ -65,7 +65,8 @@ const locales = {
         label_clipper_end: "Кінець (напр., 01:45):",
         btn_smart_trim: "Завантажити фрагмент",
         error_clipper_times: "Помилка: Час кінця повинен бути більшим за час початку.",
-        error_clipper_format: "Помилка: Невірний формат часу. Використовуйте MM:SS або HH:MM:SS."
+        error_clipper_format: "Помилка: Невірний формат часу. Використовуйте MM:SS або HH:MM:SS.",
+        payment_redirect_alert: "Ви будете перенаправлені до бота для оплати. Бажаєте продовжити?"
     },
     'en': {
         title_profile: "My Profile",
@@ -117,7 +118,8 @@ const locales = {
         label_clipper_end: "End (e.g., 01:45):",
         btn_smart_trim: "Download Fragment",
         error_clipper_times: "Error: End time must be greater than start time.",
-        error_clipper_format: "Error: Invalid time format. Use MM:SS or HH:MM:SS."
+        error_clipper_format: "Error: Invalid time format. Use MM:SS or HH:MM:SS.",
+        payment_redirect_alert: "You will be redirected to the bot for payment. Do you want to continue?"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -169,7 +171,8 @@ const locales = {
         label_clipper_end: "Koniec (np. 01:45):",
         btn_smart_trim: "Pobierz fragment",
         error_clipper_times: "Błąd: Czas końcowy musi być większy niż czas początkowy.",
-        error_clipper_format: "Błąd: Nieprawidłowy format czasu. Użyj MM:SS lub HH:MM:SS."
+        error_clipper_format: "Błąd: Nieprawidłowy format czasu. Użyj MM:SS lub HH:MM:SS.",
+        payment_redirect_alert: "Zostaniesz przekierowany do bota, aby dokonać płatności. Czy chcesz kontynuować?"
     }
 };
 
