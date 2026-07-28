@@ -53,9 +53,9 @@ async def main():
     app = create_api_app()
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8080)
+    site = web.TCPSite(runner, None, 8080)
     await site.start()
-    logging.info("API Server started on http://0.0.0.0:8080")
+    logging.info("API Server started on port 8080 (all interfaces)")
     
     # Запуск фонової задачі для retention (утримання)
     asyncio.create_task(retention_drip_campaign(bot))
