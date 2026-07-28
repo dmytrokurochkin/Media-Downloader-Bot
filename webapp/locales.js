@@ -76,7 +76,8 @@ const locales = {
         badge_heavy_lifter_desc: "Завантажте загалом більше 1 ГБ даних.",
         badge_night_owl_name: "Нічна сова",
         badge_night_owl_desc: "Зробіть завантаження вночі (з 00:00 до 05:00 UTC).",
-        progress_label: "Прогрес"
+        progress_label: "Прогрес",
+        label_badges_main: "Досягнення"
     },
     'en': {
         title_profile: "My Profile",
@@ -139,7 +140,8 @@ const locales = {
         badge_heavy_lifter_desc: "Download a total of over 1 GB of data.",
         badge_night_owl_name: "Night Owl",
         badge_night_owl_desc: "Make a download during the night (00:00 to 05:00 UTC).",
-        progress_label: "Progress"
+        progress_label: "Progress",
+        label_badges_main: "Achievements"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -202,7 +204,8 @@ const locales = {
         badge_heavy_lifter_desc: "Pobierz łącznie ponad 1 GB danych.",
         badge_night_owl_name: "Nocna sowa",
         badge_night_owl_desc: "Dokonaj pobrania w nocy (od 00:00 do 05:00 UTC).",
-        progress_label: "Postęp"
+        progress_label: "Postęp",
+        label_badges_main: "Osiągnięcia"
     }
 };
 

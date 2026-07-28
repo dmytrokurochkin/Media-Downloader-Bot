@@ -280,6 +280,9 @@ function applyTranslations() {
     document.getElementById('tab_leaderboard').innerText = getText(lang, 'title_leaderboard');
     document.getElementById('tab_store').innerText = getText(lang, 'title_store');
     
+    const labelBadgesMain = document.getElementById('label_badges_main');
+    if (labelBadgesMain) labelBadgesMain.innerText = getText(lang, 'label_badges_main');
+    
     const tabSettingsEl = document.getElementById('tab_settings');
     if (tabSettingsEl) tabSettingsEl.innerText = getText(lang, 'title_settings');
     
@@ -455,6 +458,54 @@ function renderProfile() {
         document.getElementById('activeSubDays').innerText = diffDays;
         
         document.getElementById('buyVipBtn').innerText = getText(lang, 'btn_extend_vip');
+    }
+
+    // Fetch and render badges for current user
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+        fetch(`${apiUrl}/get_profile?id=${tg.initDataUnsafe.user.id}&initData=${encodeURIComponent(tg.initData || '')}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.profile) {
+                renderBadgesGrid('profileBadgesGrid', data.profile);
+            } else {
+                document.getElementById('profileBadgesGrid').innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Помилка завантаження</span>';
+            }
+        })
+        .catch(err => {
+            console.error("Failed to fetch current user profile", err);
+            document.getElementById('profileBadgesGrid').innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Помилка завантаження</span>';
+        });
+    }
+}
+
+function renderBadgesGrid(containerId, profile) {
+    const badgesGrid = document.getElementById(containerId);
+    if (!badgesGrid) return;
+    badgesGrid.innerHTML = '';
+    const badgeKeys = Object.keys(ALL_BADGES);
+    if (badgeKeys.length > 0) {
+        badgeKeys.forEach(b => {
+            const badgeDef = ALL_BADGES[b];
+            const isUnlocked = (profile.badges || []).includes(b);
+            const el = document.createElement('div');
+            el.style.fontSize = '2rem';
+            el.style.textAlign = 'center';
+            el.style.cursor = 'pointer';
+            el.title = getText(lang, 'badge_' + b + '_name');
+            el.innerText = badgeDef.icon;
+            
+            if (!isUnlocked) {
+                el.style.filter = 'grayscale(100%)';
+                el.style.opacity = '0.4';
+            }
+            
+            el.onclick = () => openBadgeModal(b, profile);
+            badgesGrid.appendChild(el);
+        });
+    } else {
+        badgesGrid.innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Немає бейджів</span>';
     }
 }
 
@@ -735,31 +786,7 @@ async function openProfileModal(userId) {
             document.getElementById('modalTraffic').innerText = mb + ' MB';
         }
         
-        const badgesGrid = document.getElementById('modalBadgesGrid');
-        badgesGrid.innerHTML = '';
-        const badgeKeys = Object.keys(ALL_BADGES);
-        if (badgeKeys.length > 0) {
-            badgeKeys.forEach(b => {
-                const badgeDef = ALL_BADGES[b];
-                const isUnlocked = (profile.badges || []).includes(b);
-                const el = document.createElement('div');
-                el.style.fontSize = '2rem';
-                el.style.textAlign = 'center';
-                el.style.cursor = 'pointer';
-                el.title = getText(lang, 'badge_' + b + '_name');
-                el.innerText = badgeDef.icon;
-                
-                if (!isUnlocked) {
-                    el.style.filter = 'grayscale(100%)';
-                    el.style.opacity = '0.4';
-                }
-                
-                el.onclick = () => openBadgeModal(b, profile);
-                badgesGrid.appendChild(el);
-            });
-        } else {
-            badgesGrid.innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Немає бейджів</span>';
-        }
+        renderBadgesGrid('modalBadgesGrid', profile);
         
         document.getElementById('publicProfileModal').style.display = 'flex';
     } catch (err) {
