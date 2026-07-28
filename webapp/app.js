@@ -483,15 +483,14 @@ function renderBadgesGrid(containerId, profile) {
             const badgeDef = ALL_BADGES[b];
             const isUnlocked = (profile.badges || []).includes(b);
             const el = document.createElement('div');
-            el.style.fontSize = '2rem';
-            el.style.textAlign = 'center';
-            el.style.cursor = 'pointer';
+            el.className = 'badge-item';
             el.title = getText(lang, 'badge_' + b + '_name');
             el.innerText = badgeDef.icon;
             
             if (!isUnlocked) {
-                el.style.filter = 'grayscale(100%)';
-                el.style.opacity = '0.4';
+                el.classList.add('locked');
+            } else {
+                el.classList.add('unlocked');
             }
             
             el.onclick = () => openBadgeModal(b, profile);

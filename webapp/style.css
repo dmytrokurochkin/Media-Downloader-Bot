@@ -207,6 +207,29 @@ body {
     border: 1px solid var(--glass-border);
 }
 
+.badge-item {
+    font-size: 2.2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s ease, opacity 0.3s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.badge-item:active {
+    transform: scale(0.85);
+}
+
+.badge-item.unlocked {
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+}
+
+.badge-item.locked {
+    filter: grayscale(100%);
+    opacity: 0.4;
+}
+
 .stat-row {
     display: flex;
     justify-content: space-between;

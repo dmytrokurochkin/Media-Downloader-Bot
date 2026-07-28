@@ -313,9 +313,9 @@
         </div>
 
         <!-- Badge Info Modal -->
-        <div id="badgeInfoModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
-            <div class="modal-content glass fade-in" style="padding: 2rem; width: 85%; max-width: 350px; border-radius: 20px; position: relative; text-align: center;">
-                <span class="close-modal" onclick="closeBadgeModal()" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
+        <div id="badgeInfoModal" class="modal-overlay" onclick="if(event.target === this) closeBadgeModal()">
+            <div class="modal-content glass" style="position: relative; text-align: center; padding: 2rem;">
+                <span class="close-modal" onclick="closeBadgeModal()">&times;</span>
                 
                 <div id="badgeModalIcon" style="font-size: 4rem; margin-bottom: 1rem; transition: filter 0.3s;">🏆</div>
                 <h2 id="badgeModalName" style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--primary-color);">Badge Name</h2>
