@@ -646,7 +646,9 @@ function setupSearch() {
 
         debounceTimer = setTimeout(async () => {
             try {
-                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}&initData=${encodeURIComponent(tg.initData || '')}`);
+                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}&initData=${encodeURIComponent(tg.initData || '')}`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
                 if (!res.ok) throw new Error("Search failed");
                 const data = await res.json();
                 
@@ -676,7 +678,9 @@ function setupSearch() {
 async function openProfileModal(userId) {
     triggerHaptic('medium');
     try {
-        const res = await fetch(`${apiUrl}/get_profile?id=${userId}&initData=${encodeURIComponent(tg.initData || '')}`);
+        const res = await fetch(`${apiUrl}/get_profile?id=${userId}&initData=${encodeURIComponent(tg.initData || '')}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
         if (!res.ok) {
             let errorMsg = "Профіль приховано або не знайдено";
             try {
