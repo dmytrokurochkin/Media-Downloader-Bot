@@ -488,8 +488,9 @@ function switchTab(tabId, btnElement) {
     document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
     document.getElementById('section-' + tabId).classList.add('active');
     
-    // Update title
-    document.getElementById('pageTitle').innerText = getText(lang, 'title_' + tabId);
+    // Update title (replace hyphens with underscores for locale keys, e.g. audio-editor -> audio_editor)
+    let titleKey = 'title_' + tabId.replace(/-/g, '_');
+    document.getElementById('pageTitle').innerText = getText(lang, titleKey);
     
     // Haptic feedback
     try { 
