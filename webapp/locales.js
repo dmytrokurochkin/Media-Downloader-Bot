@@ -66,7 +66,10 @@ const locales = {
         btn_smart_trim: "Завантажити фрагмент",
         error_clipper_times: "Помилка: Час кінця повинен бути більшим за час початку.",
         error_clipper_format: "Помилка: Невірний формат часу. Використовуйте MM:SS або HH:MM:SS.",
-        payment_redirect_alert: "Ви будете перенаправлені до бота для оплати. Бажаєте продовжити?"
+        payment_redirect_alert: "Ви будете перенаправлені до бота для оплати. Бажаєте продовжити?",
+        label_audio_editor_main: "Аудіо-редактор",
+        label_audio_editor_desc: "Завантажте аудіо або відео, і бот надішле його вам у найкращій якості у форматі MP3. Доступно для TikTok, YouTube, SoundCloud тощо.",
+        btn_audio_editor: "Конвертувати та завантажити"
     },
     'en': {
         title_profile: "My Profile",
@@ -119,7 +122,10 @@ const locales = {
         btn_smart_trim: "Download Fragment",
         error_clipper_times: "Error: End time must be greater than start time.",
         error_clipper_format: "Error: Invalid time format. Use MM:SS or HH:MM:SS.",
-        payment_redirect_alert: "You will be redirected to the bot for payment. Do you want to continue?"
+        payment_redirect_alert: "You will be redirected to the bot for payment. Do you want to continue?",
+        label_audio_editor_main: "Audio Editor",
+        label_audio_editor_desc: "Download audio or video, and the bot will send it to you in the best MP3 quality. Available for TikTok, YouTube, SoundCloud, etc.",
+        btn_audio_editor: "Convert & Download"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -172,7 +178,10 @@ const locales = {
         btn_smart_trim: "Pobierz fragment",
         error_clipper_times: "Błąd: Czas końcowy musi być większy niż czas początkowy.",
         error_clipper_format: "Błąd: Nieprawidłowy format czasu. Użyj MM:SS lub HH:MM:SS.",
-        payment_redirect_alert: "Zostaniesz przekierowany do bota, aby dokonać płatności. Czy chcesz kontynuować?"
+        payment_redirect_alert: "Zostaniesz przekierowany do bota, aby dokonać płatności. Czy chcesz kontynuować?",
+        label_audio_editor_main: "Edytor Audio",
+        label_audio_editor_desc: "Pobierz audio lub wideo, a bot wyśle Ci je w najlepszej jakości MP3. Dostępne dla TikTok, YouTube, SoundCloud itp.",
+        btn_audio_editor: "Konwertuj i Pobierz"
     }
 };
 

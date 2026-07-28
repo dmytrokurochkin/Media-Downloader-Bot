@@ -347,6 +347,16 @@ function applyTranslations() {
     
     const btnSmartTrim = document.getElementById('btn_smart_trim');
     if (btnSmartTrim) btnSmartTrim.innerText = getText(lang, 'btn_smart_trim');
+    
+    // Audio Editor translations
+    const labelAudioEditorMain = document.getElementById('label_audio_editor_main');
+    if (labelAudioEditorMain) labelAudioEditorMain.innerText = getText(lang, 'label_audio_editor_main');
+    
+    const labelAudioEditorDesc = document.getElementById('label_audio_editor_desc');
+    if (labelAudioEditorDesc) labelAudioEditorDesc.innerText = getText(lang, 'label_audio_editor_desc');
+    
+    const btnAudioEditor = document.getElementById('btn_audio_editor');
+    if (btnAudioEditor) btnAudioEditor.innerText = getText(lang, 'btn_audio_editor');
 }
 
 function renderProfile() {
@@ -721,7 +731,7 @@ async function openProfileModal(userId) {
             badgesGrid.innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Немає бейджів</span>';
         }
         
-        document.getElementById('publicProfileModal').style.display = 'block';
+        document.getElementById('publicProfileModal').style.display = 'flex';
     } catch (err) {
         console.error(err);
         tg.showAlert("Помилка завантаження профілю.");
