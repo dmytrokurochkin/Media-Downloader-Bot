@@ -69,7 +69,14 @@ const locales = {
         payment_redirect_alert: "Ви будете перенаправлені до бота для оплати. Бажаєте продовжити?",
         label_audio_editor_main: "Аудіо-редактор",
         label_audio_editor_desc: "Завантажте аудіо або відео, і бот надішле його вам у найкращій якості у форматі MP3. Доступно для TikTok, YouTube, SoundCloud тощо.",
-        btn_audio_editor: "Конвертувати та завантажити"
+        btn_audio_editor: "Конвертувати та завантажити",
+        badge_first_blood_name: "Перша кров",
+        badge_first_blood_desc: "Зробіть своє перше завантаження через бота.",
+        badge_heavy_lifter_name: "Важковаговик",
+        badge_heavy_lifter_desc: "Завантажте загалом більше 1 ГБ даних.",
+        badge_night_owl_name: "Нічна сова",
+        badge_night_owl_desc: "Зробіть завантаження вночі (з 00:00 до 05:00 UTC).",
+        progress_label: "Прогрес"
     },
     'en': {
         title_profile: "My Profile",
@@ -125,7 +132,14 @@ const locales = {
         payment_redirect_alert: "You will be redirected to the bot for payment. Do you want to continue?",
         label_audio_editor_main: "Audio Editor",
         label_audio_editor_desc: "Download audio or video, and the bot will send it to you in the best MP3 quality. Available for TikTok, YouTube, SoundCloud, etc.",
-        btn_audio_editor: "Convert & Download"
+        btn_audio_editor: "Convert & Download",
+        badge_first_blood_name: "First Blood",
+        badge_first_blood_desc: "Make your first download via the bot.",
+        badge_heavy_lifter_name: "Heavy Lifter",
+        badge_heavy_lifter_desc: "Download a total of over 1 GB of data.",
+        badge_night_owl_name: "Night Owl",
+        badge_night_owl_desc: "Make a download during the night (00:00 to 05:00 UTC).",
+        progress_label: "Progress"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -181,7 +195,14 @@ const locales = {
         payment_redirect_alert: "Zostaniesz przekierowany do bota, aby dokonać płatności. Czy chcesz kontynuować?",
         label_audio_editor_main: "Edytor Audio",
         label_audio_editor_desc: "Pobierz audio lub wideo, a bot wyśle Ci je w najlepszej jakości MP3. Dostępne dla TikTok, YouTube, SoundCloud itp.",
-        btn_audio_editor: "Konwertuj i Pobierz"
+        btn_audio_editor: "Konwertuj i Pobierz",
+        badge_first_blood_name: "Pierwsza krew",
+        badge_first_blood_desc: "Dokonaj pierwszego pobrania przez bota.",
+        badge_heavy_lifter_name: "Ciężarowiec",
+        badge_heavy_lifter_desc: "Pobierz łącznie ponad 1 GB danych.",
+        badge_night_owl_name: "Nocna sowa",
+        badge_night_owl_desc: "Dokonaj pobrania w nocy (od 00:00 do 05:00 UTC).",
+        progress_label: "Postęp"
     }
 };
 

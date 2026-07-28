@@ -23,10 +23,29 @@ const userNameParam = urlParams.get('nm') || '';
 const vipUntilTs = parseInt(urlParams.get('vu') || '0');
 const apiUrl = urlParams.get('api') || 'http://127.0.0.1:8080/api';
 
-const BADGE_ICONS = {
-    'first_blood': '🩸',
-    'heavy_lifter': '🏋️‍♂️',
-    'night_owl': '🦉'
+const ALL_BADGES = {
+    'first_blood': {
+        icon: '🩸',
+        max: 1,
+        format: (val, max) => `${val} / ${max}`,
+        calc: (profile) => Math.min(profile.downloads_count || 0, 1)
+    },
+    'heavy_lifter': {
+        icon: '🏋️‍♂️',
+        max: 1024 * 1024 * 1024,
+        format: (val, max) => {
+            const valMb = Math.round(val / (1024 * 1024));
+            const maxMb = Math.round(max / (1024 * 1024));
+            return `${valMb} MB / ${maxMb} MB`;
+        },
+        calc: (profile) => Math.min(profile.total_bytes_downloaded || 0, 1024 * 1024 * 1024)
+    },
+    'night_owl': {
+        icon: '🦉',
+        max: 1,
+        format: (val, max) => `${val} / ${max}`,
+        calc: (profile) => (profile.badges || []).includes('night_owl') ? 1 : 0
+    }
 };
 
 // Settings params
@@ -718,14 +737,24 @@ async function openProfileModal(userId) {
         
         const badgesGrid = document.getElementById('modalBadgesGrid');
         badgesGrid.innerHTML = '';
-        if (profile.badges && profile.badges.length > 0) {
-            profile.badges.forEach(b => {
-                const icon = BADGE_ICONS[b] || '🏆';
+        const badgeKeys = Object.keys(ALL_BADGES);
+        if (badgeKeys.length > 0) {
+            badgeKeys.forEach(b => {
+                const badgeDef = ALL_BADGES[b];
+                const isUnlocked = (profile.badges || []).includes(b);
                 const el = document.createElement('div');
                 el.style.fontSize = '2rem';
                 el.style.textAlign = 'center';
-                el.title = b;
-                el.innerText = icon;
+                el.style.cursor = 'pointer';
+                el.title = getText(lang, 'badge_' + b + '_name');
+                el.innerText = badgeDef.icon;
+                
+                if (!isUnlocked) {
+                    el.style.filter = 'grayscale(100%)';
+                    el.style.opacity = '0.4';
+                }
+                
+                el.onclick = () => openBadgeModal(b, profile);
                 badgesGrid.appendChild(el);
             });
         } else {
@@ -742,6 +771,46 @@ async function openProfileModal(userId) {
 function closeProfileModal() {
     triggerHaptic('light');
     document.getElementById('publicProfileModal').style.display = 'none';
+}
+
+function openBadgeModal(badgeId, profile) {
+    triggerHaptic('light');
+    const badgeDef = ALL_BADGES[badgeId];
+    if (!badgeDef) return;
+    
+    document.getElementById('badgeModalIcon').innerText = badgeDef.icon;
+    document.getElementById('badgeModalName').innerText = getText(lang, 'badge_' + badgeId + '_name');
+    document.getElementById('badgeModalDesc').innerText = getText(lang, 'badge_' + badgeId + '_desc');
+    document.getElementById('badgeModalProgressLabel').innerText = getText(lang, 'progress_label') + ':';
+    
+    const currentProgress = badgeDef.calc(profile);
+    const maxProgress = badgeDef.max;
+    const pct = Math.min((currentProgress / maxProgress) * 100, 100);
+    
+    document.getElementById('badgeModalProgressText').innerText = badgeDef.format(currentProgress, maxProgress);
+    
+    const pb = document.getElementById('badgeModalProgressBar');
+    // Allow slight animation delay
+    pb.style.transform = `scaleX(0)`;
+    setTimeout(() => {
+        pb.style.transform = `scaleX(${pct / 100})`;
+    }, 50);
+    
+    const isUnlocked = (profile.badges || []).includes(badgeId);
+    if (!isUnlocked) {
+        document.getElementById('badgeModalIcon').style.filter = 'grayscale(100%)';
+        document.getElementById('badgeModalIcon').style.opacity = '0.5';
+    } else {
+        document.getElementById('badgeModalIcon').style.filter = 'none';
+        document.getElementById('badgeModalIcon').style.opacity = '1';
+    }
+    
+    document.getElementById('badgeInfoModal').style.display = 'flex';
+}
+
+function closeBadgeModal() {
+    triggerHaptic('light');
+    document.getElementById('badgeInfoModal').style.display = 'none';
 }
 
 function initCustomSelects() {
