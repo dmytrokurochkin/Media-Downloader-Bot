@@ -22,6 +22,10 @@ const botUsername = urlParams.get('b') || '';
 const userNameParam = urlParams.get('nm') || '';
 const vipUntilTs = parseInt(urlParams.get('vu') || '0');
 const apiUrl = urlParams.get('api') || 'http://127.0.0.1:8080/api';
+const totalBytes = parseInt(urlParams.get('tb') || '0');
+const totalDownloads = parseInt(urlParams.get('td') || '0');
+const badgesStr = urlParams.get('bdg') || '';
+const userBadges = badgesStr ? badgesStr.split(',') : [];
 
 const ALL_BADGES = {
     'first_blood': {
@@ -460,24 +464,13 @@ function renderProfile() {
         document.getElementById('buyVipBtn').innerText = getText(lang, 'btn_extend_vip');
     }
 
-    // Fetch and render badges for current user
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-        fetch(`${apiUrl}/get_profile?id=${tg.initDataUnsafe.user.id}&initData=${encodeURIComponent(tg.initData || '')}`, {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.profile) {
-                renderBadgesGrid('profileBadgesGrid', data.profile);
-            } else {
-                document.getElementById('profileBadgesGrid').innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Помилка завантаження</span>';
-            }
-        })
-        .catch(err => {
-            console.error("Failed to fetch current user profile", err);
-            document.getElementById('profileBadgesGrid').innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Помилка завантаження</span>';
-        });
-    }
+    // Render badges for current user
+    const profile = {
+        downloads_count: totalDownloads,
+        total_bytes_downloaded: totalBytes,
+        badges: userBadges
+    };
+    renderBadgesGrid('profileBadgesGrid', profile);
 }
 
 function renderBadgesGrid(containerId, profile) {

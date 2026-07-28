@@ -68,6 +68,11 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     if user.get('telegram_id') in ADMIN_IDS:
         owned_themes = "standard,neon,retro"
 
+    stats = await get_user_stats(user.get('telegram_id'))
+    total_bytes = stats.get('total_bytes_downloaded', 0) if stats else 0
+    total_downloads = stats.get('downloads_count', 0) if stats else 0
+    badges_str = ",".join(stats.get('badges', [])) if stats else ""
+
     # Build query parameters
     params = {
         'v': 23, # Cache buster for the HTML file itself
@@ -87,7 +92,10 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
         'th': theme,
         'ow': owned_themes,
         'wp': watermark_position,
-        'api': PUBLIC_API_URL
+        'api': PUBLIC_API_URL,
+        'tb': total_bytes,
+        'td': total_downloads,
+        'bdg': badges_str
     }
     
     # URL Encode the parameters safely
