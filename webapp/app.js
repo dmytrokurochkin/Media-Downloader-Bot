@@ -10,7 +10,7 @@ function triggerHaptic(style) {
 
 // Extract URL parameters
 const urlParams = new URLSearchParams(window.location.search);
-const lang = urlParams.get('l') || 'uk';
+let lang = urlParams.get('l') || 'uk';
 const tier = urlParams.get('t') || 'free';
 const used = parseInt(urlParams.get('u') || '0');
 const limitDaily = parseInt(urlParams.get('lmd') || '0');
@@ -110,7 +110,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Pre-fill settings form
     const selLang = document.getElementById('settings_language');
-    if (selLang) selLang.value = lang;
+    if (selLang) {
+        selLang.value = lang;
+        selLang.addEventListener('change', (e) => {
+            lang = e.target.value;
+            applyTranslations();
+        });
+    }
 
     const selQuality = document.getElementById('settings_guest_quality');
     if (selQuality) selQuality.value = currentGuestQuality;
@@ -289,6 +295,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof updateNavVisibility === 'function') {
         updateNavVisibility();
     }
+
+    // Prevent scrolling while modals are open to fix lag
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(m => {
+        m.addEventListener('touchmove', (e) => {
+            // Prevent default scroll on the modal overlay to fix background lag
+            e.preventDefault();
+        }, { passive: false });
+    });
 });
 
 function applyTranslations() {
