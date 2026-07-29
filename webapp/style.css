@@ -50,8 +50,6 @@ body {
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
-    overflow-y: scroll; /* Force scrollbar track to always be present to prevent layout shift */
-    scrollbar-gutter: stable;
     padding-bottom: 100px; /* Space for bottom nav */
 }
 
@@ -128,12 +126,11 @@ body {
 /* Header */
 .header {
     position: sticky;
-    top: 0;
+    top: calc(1rem + var(--tg-safe-area-inset-top, 10px));
     z-index: 100;
-    padding: 1rem;
-    padding-top: calc(1rem + var(--tg-safe-area-inset-top, 10px));
-    margin: -1rem -1rem 1.5rem -1rem;
-    border-radius: 0 0 24px 24px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 32px;
     text-align: center;
 }
 

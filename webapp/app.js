@@ -493,7 +493,6 @@ function renderBadgesGrid(containerId, profile) {
             const isUnlocked = (profile.badges || []).includes(b);
             const el = document.createElement('div');
             el.className = 'badge-item';
-            el.title = getText(lang, 'badge_' + b + '_name');
             el.innerText = badgeDef.icon;
             
             if (!isUnlocked) {
