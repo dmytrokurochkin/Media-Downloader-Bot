@@ -141,7 +141,15 @@ const locales = {
         badge_night_owl_name: "Night Owl",
         badge_night_owl_desc: "Make a download during the night (00:00 to 05:00 UTC).",
         progress_label: "Progress",
-        label_badges_main: "Achievements"
+        label_badges_main: "Achievements",
+        tier_free: "Free",
+        tier_pro: "Pro Tier",
+        tier_max: "Max Tier",
+        tier_admin: "Admin",
+        stat_downloads: "Downloads today:",
+        stat_unlimited: "Unlimited",
+        downloads_count: "downloads",
+        vip_benefits: "VIP Benefits"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -205,7 +213,15 @@ const locales = {
         badge_night_owl_name: "Nocna sowa",
         badge_night_owl_desc: "Dokonaj pobrania w nocy (od 00:00 do 05:00 UTC).",
         progress_label: "Postęp",
-        label_badges_main: "Osiągnięcia"
+        label_badges_main: "Osiągnięcia",
+        tier_free: "Darmowy",
+        tier_pro: "Poziom Pro",
+        tier_max: "Poziom Max",
+        tier_admin: "Administrator",
+        stat_downloads: "Pobrane dzisiaj:",
+        stat_unlimited: "Bez limitu",
+        downloads_count: "pobrań",
+        vip_benefits: "Korzyści VIP"
     }
 };
 

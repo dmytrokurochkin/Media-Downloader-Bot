@@ -203,6 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add touch class for mobile so the effect is visible while touching
     document.querySelectorAll('.glass').forEach(card => {
         card.addEventListener('touchstart', (e) => {
+            if (e.target.closest('button, .btn, .badge-item, select, input, label, .custom-select-trigger, .custom-select-option, .switch, a')) return;
             scheduleCursorUpdate(e);
             card.classList.add('touching');
             if (card.classList.contains('card')) {
