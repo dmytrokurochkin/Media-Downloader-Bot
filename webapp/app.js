@@ -979,17 +979,24 @@ function initCustomSelects() {
             
             // Close other open selects
             document.querySelectorAll('.custom-select-wrapper').forEach(w => {
-                if (w !== wrapper) w.classList.remove('open');
+                if (w !== wrapper) {
+                    w.classList.remove('open');
+                    w.style.zIndex = '1';
+                }
             });
             
             wrapper.classList.toggle('open');
+            wrapper.style.zIndex = wrapper.classList.contains('open') ? '99' : '1';
             triggerHaptic('light');
         });
     });
     
     // Close on click outside
     document.addEventListener('click', function() {
-        document.querySelectorAll('.custom-select-wrapper').forEach(w => w.classList.remove('open'));
+        document.querySelectorAll('.custom-select-wrapper').forEach(w => {
+            w.classList.remove('open');
+            w.style.zIndex = '1';
+        });
     });
 }
 

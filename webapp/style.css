@@ -763,17 +763,19 @@ body[data-theme="retro"] {
 }
 
 .custom-select-trigger .arrow {
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 5px solid var(--text-color);
-    transition: transform 0.3s;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--text-color);
+    border-bottom: 2px solid var(--text-color);
+    transform: rotate(45deg);
+    transition: transform 0.3s cubic-bezier(0.2,0,0,1);
     opacity: 0.7;
+    margin-bottom: 4px;
 }
 
 .custom-select-wrapper.open .custom-select-trigger .arrow {
-    transform: rotate(180deg);
+    transform: rotate(225deg);
+    margin-bottom: -4px;
 }
 
 .custom-select-options {
@@ -790,11 +792,11 @@ body[data-theme="retro"] {
     max-height: 200px;
     overflow-y: auto;
     
-    background: var(--bg-color) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
 }
 
 .custom-select-wrapper.open .custom-select-options {
