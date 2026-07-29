@@ -792,11 +792,11 @@ body[data-theme="retro"] {
     max-height: 200px;
     overflow-y: auto;
     
-    background: var(--glass-bg) !important;
+    background: var(--bg-color) !important;
     backdrop-filter: blur(30px);
     -webkit-backdrop-filter: blur(30px);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 .custom-select-wrapper.open .custom-select-options {
