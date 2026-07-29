@@ -758,6 +758,7 @@ function setupSearch() {
 }
 
 async function openProfileModal(userId) {
+    document.body.style.overflow = 'hidden';
     triggerHaptic('medium');
     try {
         const res = await fetch(`${apiUrl}/get_profile?id=${userId}&initData=${encodeURIComponent(tg.initData || '')}`, {
@@ -799,9 +800,14 @@ async function openProfileModal(userId) {
 function closeProfileModal() {
     triggerHaptic('light');
     document.getElementById('publicProfileModal').style.display = 'none';
+    const badgeModal = document.getElementById('badgeInfoModal');
+    if (!badgeModal || badgeModal.style.display === 'none') {
+        document.body.style.overflow = '';
+    }
 }
 
 function openBadgeModal(badgeId, profile) {
+    document.body.style.overflow = 'hidden';
     triggerHaptic('light');
     const badgeDef = ALL_BADGES[badgeId];
     if (!badgeDef) return;
@@ -839,6 +845,10 @@ function openBadgeModal(badgeId, profile) {
 function closeBadgeModal() {
     triggerHaptic('light');
     document.getElementById('badgeInfoModal').style.display = 'none';
+    const publicModal = document.getElementById('publicProfileModal');
+    if (!publicModal || publicModal.style.display === 'none') {
+        document.body.style.overflow = '';
+    }
 }
 
 function initCustomSelects() {
