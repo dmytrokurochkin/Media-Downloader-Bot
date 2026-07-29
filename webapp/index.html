@@ -6,7 +6,7 @@
     <title>Media Downloader Bot</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=28">
+    <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
     <div class="app-container">
@@ -282,7 +282,7 @@
         
         <!-- Public Profile Modal -->
         <div id="publicProfileModal" class="modal" style="display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
-            <div class="modal-content glass fade-in" style="padding: 2rem; width: 85%; max-width: 400px; border-radius: 20px; position: relative;">
+            <div class="modal-content card glass fade-in" style="padding: 2rem; width: 85%; max-width: 400px; position: relative;">
                 <span class="close-modal" onclick="closeProfileModal()" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
                 <div class="center-text">
                     <div class="avatar-placeholder" style="margin: 0 auto 1rem; width: 80px; height: 80px;">
@@ -314,8 +314,8 @@
 
         <!-- Badge Info Modal -->
         <div id="badgeInfoModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;" onclick="if(event.target === this) closeBadgeModal()">
-            <div class="modal-content glass fade-in" style="position: relative; text-align: center; padding: 2rem; width: 85%; max-width: 350px; border-radius: 20px;">
-                <span class="close-modal" onclick="closeBadgeModal()">&times;</span>
+            <div class="modal-content card glass fade-in" style="position: relative; text-align: center; padding: 2rem; width: 85%; max-width: 350px;">
+                <span class="close-modal" onclick="closeBadgeModal()" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
                 
                 <div id="badgeModalIcon" style="font-size: 4rem; margin-bottom: 1rem; transition: filter 0.3s;">🏆</div>
                 <h2 id="badgeModalName" style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--primary-color);">Badge Name</h2>
@@ -335,7 +335,7 @@
 
     </div>
 
-    <script src="locales.js?v=28"></script>
-    <script src="app.js?v=28"></script>
+    <script src="locales.js?v=29"></script>
+    <script src="app.js?v=29"></script>
 </body>
 </html>

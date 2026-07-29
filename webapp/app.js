@@ -229,6 +229,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Prevent swipe if vertical scrolling was dominant
         if (Math.abs(deltaX) > deltaY && Math.abs(deltaX) > swipeThreshold) {
+            
+            // Prevent swipe if a modal is open
+            const publicModal = document.getElementById('publicProfileModal');
+            const badgeModal = document.getElementById('badgeInfoModal');
+            if ((publicModal && publicModal.style.display !== 'none') || 
+                (badgeModal && badgeModal.style.display !== 'none')) {
+                return;
+            }
+
             const tabs = ['profile', 'leaderboard', 'store', 'clipper', 'audio-editor', 'settings'];
             let currentIndex = 0;
             document.querySelectorAll('.section').forEach((sec, idx) => {
