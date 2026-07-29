@@ -178,8 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const x = clientX - rect.left;
             const y = clientY - rect.top;
             
-            const rotX = -((y / rect.height) - 0.5) * 10;
-            const rotY = ((x / rect.width) - 0.5) * 10;
+            const rotX = -((y / rect.height) - 0.5) * 12;
+            const rotY = ((x / rect.width) - 0.5) * 12;
             
             card.style.setProperty('--mouse-x', `${x}px`);
             card.style.setProperty('--mouse-y', `${y}px`);
@@ -405,6 +405,28 @@ function applyTranslations() {
     
     const btnSaveSettings = document.getElementById('btn_save_settings');
     if (btnSaveSettings) btnSaveSettings.innerText = getText(lang, 'btn_save_settings');
+    
+    const btnChooseFile1 = document.getElementById('btn_choose_file_1');
+    if (btnChooseFile1) btnChooseFile1.innerText = getText(lang, 'btn_choose_file');
+    
+    const editorCoverName = document.getElementById('editor_cover_name');
+    if (editorCoverName) {
+        const coverInput = document.getElementById('editor_cover');
+        if (!coverInput || !coverInput.files || coverInput.files.length === 0) {
+            editorCoverName.innerText = getText(lang, 'no_file_chosen');
+        }
+    }
+    
+    const btnChooseFile2 = document.getElementById('btn_choose_file_2');
+    if (btnChooseFile2) btnChooseFile2.innerText = getText(lang, 'btn_choose_file');
+    
+    const watermarkName = document.getElementById('settings_watermark_name');
+    if (watermarkName) {
+        const watermarkInput = document.getElementById('settings_watermark_file');
+        if (!watermarkInput || !watermarkInput.files || watermarkInput.files.length === 0) {
+            watermarkName.innerText = getText(lang, 'no_file_chosen');
+        }
+    }
     
     // Clipper translations
     const labelClipperMain = document.getElementById('label_clipper_main');

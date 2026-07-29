@@ -81,8 +81,8 @@ body {
 }
 
 .card.glass.touching {
-    transition: transform 0s linear;
-    transform: perspective(800px) rotateX(var(--rot-x, 0deg)) rotateY(var(--rot-y, 0deg)) scale(0.98);
+    transition: transform 0.08s ease-out;
+    transform: perspective(800px) rotateX(var(--rot-x, 0deg)) rotateY(var(--rot-y, 0deg)) scale(0.96);
 }
 
 .glass::before {

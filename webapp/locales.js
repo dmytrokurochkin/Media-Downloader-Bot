@@ -77,7 +77,9 @@ const locales = {
         badge_night_owl_name: "Нічна сова",
         badge_night_owl_desc: "Зробіть завантаження вночі (з 00:00 до 05:00 UTC).",
         progress_label: "Прогрес",
-        label_badges_main: "Досягнення"
+        label_badges_main: "Досягнення",
+        btn_choose_file: "Оберіть файл",
+        no_file_chosen: "Файл не обрано"
     },
     'en': {
         title_profile: "My Profile",
@@ -149,7 +151,9 @@ const locales = {
         stat_downloads: "Downloads today:",
         stat_unlimited: "Unlimited",
         downloads_count: "downloads",
-        vip_benefits: "VIP Benefits"
+        vip_benefits: "VIP Benefits",
+        btn_choose_file: "Choose File",
+        no_file_chosen: "No file chosen"
     },
     'pl': {
         title_profile: "Mój Profil",
@@ -221,7 +225,9 @@ const locales = {
         stat_downloads: "Pobrane dzisiaj:",
         stat_unlimited: "Bez limitu",
         downloads_count: "pobrań",
-        vip_benefits: "Korzyści VIP"
+        vip_benefits: "Korzyści VIP",
+        btn_choose_file: "Wybierz plik",
+        no_file_chosen: "Nie wybrano pliku"
     }
 };
 

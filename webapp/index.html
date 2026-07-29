@@ -170,7 +170,13 @@
                     
                     <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
                         <label id="label_editor_cover" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Обкладинка (Cover Art):</label>
-                        <input type="file" id="editor_cover" accept="image/*" class="glass-input" style="padding: 0.5rem;">
+                        <div style="position: relative;">
+                            <input type="file" id="editor_cover" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;" onchange="document.getElementById('editor_cover_name').innerText = this.files.length ? this.files[0].name : getText(lang, 'no_file_chosen')">
+                            <div class="glass-input" style="padding: 0.6rem; display: flex; align-items: center; justify-content: flex-start; pointer-events: none;">
+                                <span id="btn_choose_file_1" style="background: rgba(255,255,255,0.15); padding: 0.35rem 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-right: 10px; font-weight: 500;">Оберіть файл</span>
+                                <span id="editor_cover_name" style="font-size: 0.85rem; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Файл не обрано</span>
+                            </div>
+                        </div>
                         <span id="label_editor_cover_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Бот попросить надіслати фото в чат після натискання кнопки.</span>
                     </div>
                     
@@ -244,7 +250,13 @@
 
                     <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
                         <label id="label_watermark_file" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Завантажити логотип</label>
-                        <input type="file" id="settings_watermark_file" accept="image/*" class="glass-input" style="padding: 0.5rem;">
+                        <div style="position: relative;">
+                            <input type="file" id="settings_watermark_file" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;" onchange="document.getElementById('settings_watermark_name').innerText = this.files.length ? this.files[0].name : getText(lang, 'no_file_chosen')">
+                            <div class="glass-input" style="padding: 0.6rem; display: flex; align-items: center; justify-content: flex-start; pointer-events: none;">
+                                <span id="btn_choose_file_2" style="background: rgba(255,255,255,0.15); padding: 0.35rem 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-right: 10px; font-weight: 500;">Оберіть файл</span>
+                                <span id="settings_watermark_name" style="font-size: 0.85rem; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Файл не обрано</span>
+                            </div>
+                        </div>
                         <span id="label_watermark_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Якщо ви оберете файл, бот попросить вас надіслати його в чат для підтвердження.</span>
                     </div>
 
@@ -335,7 +347,7 @@
 
     </div>
 
-    <script src="locales.js?v=35"></script>
-    <script src="app.js?v=35"></script>
+    <script src="locales.js?v=37"></script>
+    <script src="app.js?v=37"></script>
 </body>
 </html>
