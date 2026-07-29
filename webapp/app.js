@@ -142,16 +142,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Interactive spotlight and prism effect
-    const updateCursorPos = (e) => {
-        let clientX = e.clientX;
-        let clientY = e.clientY;
-        if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
+    let isCursorUpdating = false;
+    let cursorEvent = null;
+
+    const updateCursorPos = () => {
+        if (!cursorEvent) {
+            isCursorUpdating = false;
+            return;
         }
         
-        document.querySelectorAll('.glass').forEach(card => {
+        let clientX = cursorEvent.clientX;
+        let clientY = cursorEvent.clientY;
+        if (cursorEvent.touches && cursorEvent.touches.length > 0) {
+            clientX = cursorEvent.touches[0].clientX;
+            clientY = cursorEvent.touches[0].clientY;
+        }
+        
+        const glassElements = document.querySelectorAll('.glass');
+        for (let i = 0; i < glassElements.length; i++) {
+            const card = glassElements[i];
+            // Skip elements that are not visible to save expensive getBoundingClientRect calls
+            if (card.offsetWidth === 0 && card.offsetHeight === 0) continue;
+            
             const rect = card.getBoundingClientRect();
+            
+            // Only update if the card is in the viewport vertically
+            if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+            
             const x = clientX - rect.left;
             const y = clientY - rect.top;
             
@@ -162,16 +179,25 @@ document.addEventListener('DOMContentLoaded', () => {
             card.style.setProperty('--mouse-y', `${y}px`);
             card.style.setProperty('--rot-x', `${rotX}deg`);
             card.style.setProperty('--rot-y', `${rotY}deg`);
-        });
+        }
+        isCursorUpdating = false;
     };
 
-    document.body.addEventListener('mousemove', updateCursorPos);
-    document.body.addEventListener('touchmove', updateCursorPos);
+    const scheduleCursorUpdate = (e) => {
+        cursorEvent = e;
+        if (!isCursorUpdating) {
+            isCursorUpdating = true;
+            requestAnimationFrame(updateCursorPos);
+        }
+    };
+
+    document.body.addEventListener('mousemove', scheduleCursorUpdate);
+    document.body.addEventListener('touchmove', scheduleCursorUpdate, {passive: true});
     
     // Add touch class for mobile so the effect is visible while touching
     document.querySelectorAll('.glass').forEach(card => {
         card.addEventListener('touchstart', (e) => {
-            updateCursorPos(e);
+            scheduleCursorUpdate(e);
             card.classList.add('touching');
             if (card.classList.contains('card')) {
                 try { 

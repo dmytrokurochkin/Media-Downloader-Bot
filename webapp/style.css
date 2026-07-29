@@ -76,7 +76,12 @@ body {
     transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.3s;
 }
 
-.card.glass:active, .card.glass.touching {
+.card.glass:active {
+    transform: perspective(800px) scale(0.98);
+}
+
+.card.glass.touching {
+    transition: transform 0s linear;
     transform: perspective(800px) rotateX(var(--rot-x, 0deg)) rotateY(var(--rot-y, 0deg)) scale(0.98);
 }
 
@@ -610,6 +615,7 @@ body[data-theme="retro"] {
 .modal-content {
     width: 100%;
     max-width: 400px;
+    border-radius: 32px;
     transform: scale(0.9);
     transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
 }
