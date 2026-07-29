@@ -130,6 +130,7 @@ body {
     top: calc(1rem + var(--tg-safe-area-inset-top, 10px));
     z-index: 100;
     padding: 1rem 1.5rem;
+    margin-top: var(--tg-safe-area-inset-top, 10px);
     margin-bottom: 1.5rem;
     border-radius: 32px;
     text-align: center;
