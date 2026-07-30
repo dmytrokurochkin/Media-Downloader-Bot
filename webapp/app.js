@@ -200,9 +200,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.addEventListener('mousemove', scheduleCursorUpdate);
     document.body.addEventListener('touchmove', scheduleCursorUpdate, {passive: true});
     
-    // Add touch class for mobile so the effect is visible while touching
+    // Add touch/mouse class so the 3D effect is visible while pressing
     document.querySelectorAll('.glass').forEach(card => {
-        card.addEventListener('touchstart', (e) => {
+        const handleDown = (e) => {
             if (e.target.closest('button, .btn, .badge-item, select, input, label, .custom-select-trigger, .custom-select-option, .switch, a')) return;
             scheduleCursorUpdate(e);
             card.classList.add('touching');
@@ -211,20 +211,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     triggerHaptic('heavy'); 
                     setTimeout(() => triggerHaptic('heavy'), 20);
                     setTimeout(() => triggerHaptic('heavy'), 40);
-                } catch(e){}
+                } catch(err){}
             }
-        }, {passive: true});
-        card.addEventListener('touchend', () => {
+        };
+        const handleUp = () => {
             card.classList.remove('touching');
             if (card.classList.contains('card')) {
                 try { 
                     triggerHaptic('heavy'); 
-                } catch(e){}
+                } catch(err){}
             }
-        });
-        card.addEventListener('touchcancel', () => {
+        };
+        const handleCancel = () => {
             card.classList.remove('touching');
-        });
+        };
+        
+        card.addEventListener('touchstart', handleDown, {passive: true});
+        card.addEventListener('touchend', handleUp);
+        card.addEventListener('touchcancel', handleCancel);
+        
+        card.addEventListener('mousedown', handleDown);
+        card.addEventListener('mouseup', handleUp);
+        card.addEventListener('mouseleave', handleCancel);
     });
 
     // Swipe navigation logic

@@ -75,7 +75,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
 
     # Build query parameters
     params = {
-        'v': 40, # Cache buster for the HTML file itself
+        'v': 41, # Cache buster for the HTML file itself
         'l': lang,
         't': tier,
         'u': used_downloads,

@@ -82,10 +82,6 @@ body {
     transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.3s;
 }
 
-.card.glass:active {
-    transform: perspective(800px) scale(0.98);
-}
-
 .card.glass.touching {
     transition: transform 0.08s ease-out;
     transform: perspective(800px) rotateX(var(--rot-x, 0deg)) rotateY(var(--rot-y, 0deg)) scale(0.96);
