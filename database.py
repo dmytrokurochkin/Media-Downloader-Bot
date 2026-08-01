@@ -1,9 +1,10 @@
 import aiosqlite
 import datetime
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-DB_PATH = Path("database.db")
+DB_PATH = Path(os.getenv("DB_PATH", "database.db"))
 _db_connection = None
 
 async def init_db_connection():

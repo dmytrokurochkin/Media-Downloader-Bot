@@ -1,6 +1,8 @@
 aiogram==3.29.1
 yt-dlp
 aiohttp
+aiohttp-cors
+cachetools
 python-dotenv
 gallery-dl
 spotdl

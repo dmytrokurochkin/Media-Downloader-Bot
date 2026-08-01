@@ -1,0 +1,55 @@
+services:
+  # Prebuilt image (aiogram/telegram-bot-api), rebuilt daily from upstream
+  # tdlib/telegram-bot-api master. Building from source instead (Dockerfile.
+  # telegram-bot-api) takes ~25 minutes - see docker-compose.build.yml to
+  # opt into that instead.
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:10.2
+    environment:
+      - TELEGRAM_API_ID=${API_ID}
+      - TELEGRAM_API_HASH=${API_HASH}
+      - TELEGRAM_LOCAL=1
+      - TELEGRAM_STAT=1
+    volumes:
+      - tg-api-data:/var/lib/telegram-bot-api
+    ports:
+      - "127.0.0.1:8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8082/ >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      # LOCAL_API_SERVER_URL in .env points at 127.0.0.1:8081, which is only
+      # valid on the host. Inside the compose network it must hit the
+      # telegram-bot-api service name instead.
+      - LOCAL_API_SERVER_URL=http://telegram-bot-api:8081
+      - DB_PATH=/app/data/database.db
+    depends_on:
+      telegram-bot-api:
+        condition: service_healthy
+    volumes:
+      - ./cookies.txt:/app/cookies.txt:ro
+      - bot-data:/app/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/webapp/index.html"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  tg-api-data:
+  bot-data:

@@ -1,0 +1,44 @@
+FROM debian:bookworm-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    gperf \
+    zlib1g-dev \
+    libssl-dev \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+RUN git clone --recursive https://github.com/tdlib/telegram-bot-api.git .
+
+RUN rm -rf build && mkdir build && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release .. \
+    && make -j"$(nproc)"
+
+FROM debian:bookworm-slim
+
+# wget (not curl) to match the prebuilt aiogram/telegram-bot-api image's
+# healthcheck contract - this Dockerfile is an escape hatch that must stay a
+# drop-in swap for it in docker-compose.build.yml.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    zlib1g \
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/build/telegram-bot-api /usr/local/bin/telegram-bot-api
+
+RUN mkdir -p /var/lib/telegram-bot-api /tmp/telegram-bot-api
+VOLUME /var/lib/telegram-bot-api
+
+EXPOSE 8081 8082
+
+# --http-stat-port serves a plain 200, unlike "/" on the main port (404 JSON,
+# server-alive-but-unknown-route - not a failure, but awkward to healthcheck).
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=5 \
+    CMD wget -q -O - http://127.0.0.1:8082/ >/dev/null 2>&1 || exit 1
+
+CMD ["sh", "-c", "exec telegram-bot-api --local --http-port=8081 --http-stat-port=8082 --dir=/var/lib/telegram-bot-api --temp-dir=/tmp/telegram-bot-api --api-id=\"$TELEGRAM_API_ID\" --api-hash=\"$TELEGRAM_API_HASH\""]

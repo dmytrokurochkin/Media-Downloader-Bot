@@ -1,0 +1,11 @@
+# Opt-in override: compile telegram-bot-api from source instead of pulling
+# the prebuilt aiogram/telegram-bot-api image. Takes ~25 minutes.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+services:
+  telegram-bot-api:
+    image: media-downloader-fork-telegram-bot-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile.telegram-bot-api
