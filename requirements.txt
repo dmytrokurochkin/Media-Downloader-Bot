@@ -1,13 +1,14 @@
 aiogram==3.29.1
 yt-dlp
 aiohttp
+aiohttp_cors
+cachetools
 python-dotenv
 gallery-dl
 spotdl
 requests
 beautifulsoup4
 aiosqlite
-Babel
 mutagen
 Pillow
 readability-lxml

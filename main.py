@@ -1,10 +1,6 @@
 import asyncio
 import logging
-import os
-from aiogram.filters import CommandStart
-from aiogram import F
 
-from core.config import BOT_TOKEN
 from core.loader import bot, dp
 from database import init_db, init_db_connection, close_db_connection
 from handlers.user import user_router

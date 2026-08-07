@@ -57,7 +57,6 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
                 "--log-level", "ERROR"
             ]
             from core.config import FFMPEG_WIN_PATH
-            import os
             from pathlib import Path
             ffmpeg_winget = Path(FFMPEG_WIN_PATH)
             if ffmpeg_winget.exists():
@@ -179,9 +178,8 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         return None
         
     opts['match_filter'] = check_size
-    
+
     from core.config import FFMPEG_WIN_PATH
-    import os
     ffmpeg_winget = Path(FFMPEG_WIN_PATH)
     if ffmpeg_winget.exists():
         opts['ffmpeg_location'] = str(ffmpeg_winget)
@@ -518,7 +516,6 @@ def download_trim_sync(url: str, start_sec: int, end_sec: int, session_dir: Path
                 pass
 
     from core.config import FFMPEG_WIN_PATH
-    import os
     import subprocess
     ffmpeg_winget = Path(FFMPEG_WIN_PATH)
     

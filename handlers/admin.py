@@ -1,10 +1,9 @@
 import asyncio
-from aiogram import Router, F, Bot
+from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from datetime import datetime
 
 from core.config import ADMIN_IDS
 from core.loader import bot
@@ -289,7 +288,6 @@ async def btn_vip_list(message: Message, state: FSMContext):
     full_text = "\n".join(text_lines)
     
     if len(full_text) > 4000:
-        import io
         from aiogram.types import BufferedInputFile
         file_content = full_text.encode('utf-8')
         doc = BufferedInputFile(file_content, filename="vip_list.txt")

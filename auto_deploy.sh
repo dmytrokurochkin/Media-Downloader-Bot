@@ -42,7 +42,7 @@ if [ "$EUID" -ne 0 ]; then
     SUDO="sudo"
 fi
 $SUDO apt-get update
-$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg curl libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg nodejs curl libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
 
 # 3. Завантаження та збірка Telegram Bot API (якщо не зібрано)
 echo -e "\n${BLUE}[3/7] Налаштування Telegram Bot API Server...${NC}"

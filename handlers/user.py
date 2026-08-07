@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings, get_user_stats
+from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings, get_user_stats, set_watermark_file_id
 from locales import get_text
 import json
 from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard, get_onboarding_keyboard
@@ -20,15 +20,17 @@ user_router = Router()
 class SupportState(StatesGroup):
     waiting_for_message = State()
 
+class WatermarkState(StatesGroup):
+    waiting_for_photo = State()
+
 from core.webapp import generate_webapp_url
-from aiogram.types import MenuButtonWebApp, WebAppInfo
+from aiogram.types import WebAppInfo
 
 @user_router.message(CommandStart(deep_link=True, magic=F.args == "buy_vip"))
 async def start_buy_vip_handler(message: Message, state: FSMContext):
     asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
-    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    # Redirect to VIP command
+    # Redirect to VIP command (it fetches/creates the user itself)
     from handlers.payment import vip_command
     await vip_command(message, state)
 
@@ -155,8 +157,18 @@ async def web_app_data_handler(message: Message, state: FSMContext):
             asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
             
             if data.get('watermark_updated'):
-                msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
-                asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
+                if user.get('tier') == 'max':
+                    await state.set_state(WatermarkState.waiting_for_photo)
+                    msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
+                    asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
+                else:
+                    text = "⭐️ Автоматичне брендування (водяний знак) доступне лише для тарифу Max."
+                    if language == 'en':
+                        text = "⭐️ Auto-branding (watermark) is only available for the Max tier."
+                    elif language == 'pl':
+                        text = "⭐️ Automatyczne znakowanie (znak wodny) jest dostępne tylko w planie Max."
+                    msg2 = await message.answer(text)
+                    asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 30))
         elif data.get('action') == 'buy_theme':
             theme = data.get('theme')
             from handlers.payment import send_theme_invoice
@@ -232,6 +244,34 @@ async def web_app_data_handler(message: Message, state: FSMContext):
                 await process_url(message, url, user, is_guest_mode=False, state=state)
     except Exception as e:
         print("Error handling web_app_data:", e)
+
+@user_router.message(WatermarkState.waiting_for_photo, F.photo | F.document)
+async def watermark_photo_handler(message: Message, state: FSMContext):
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+
+    if message.photo:
+        file_id = message.photo[-1].file_id
+    elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
+        file_id = message.document.file_id
+    else:
+        text = "⚠️ Будь ласка, надішліть коректне фото."
+        if user['language_code'] == 'en':
+            text = "⚠️ Please send a valid photo."
+        elif user['language_code'] == 'pl':
+            text = "⚠️ Wyślij poprawne zdjęcie."
+        await message.answer(text)
+        return
+
+    await set_watermark_file_id(message.from_user.id, file_id)
+    await state.clear()
+
+    text = "✅ Логотип збережено! Він буде додаватись до ваших відео та фото."
+    if user['language_code'] == 'en':
+        text = "✅ Logo saved! It will now be added to your videos and photos."
+    elif user['language_code'] == 'pl':
+        text = "✅ Logo zapisane! Będzie teraz dodawane do Twoich filmów i zdjęć."
+    msg = await message.answer(text)
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
 
 @user_router.callback_query(F.data == "set_lang")
 async def settings_set_lang(callback: CallbackQuery):
@@ -411,7 +451,8 @@ async def process_support_message(message: Message, state: FSMContext, bot: Bot)
             pass
             
     # Send message to all admins
-    support_text = f"🆘 <b>Звернення в підтримку</b>\n\n<b>Від:</b> <a href='tg://user?id={message.from_user.id}'>{html.escape(message.from_user.full_name)}</a> (@{message.from_user.username})\n<b>ID:</b> <code>{message.from_user.id}</code>\n\n<b>Повідомлення:</b>\n{html.escape(message.text)}"
+    username_part = f"@{message.from_user.username}" if message.from_user.username else "без юзернейму"
+    support_text = f"🆘 <b>Звернення в підтримку</b>\n\n<b>Від:</b> <a href='tg://user?id={message.from_user.id}'>{html.escape(message.from_user.full_name)}</a> ({username_part})\n<b>ID:</b> <code>{message.from_user.id}</code>\n\n<b>Повідомлення:</b>\n{html.escape(message.text)}"
     for admin_id in ADMIN_IDS:
         try:
             await bot.send_message(admin_id, support_text)

@@ -1,7 +1,7 @@
 import aiosqlite
 import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 
 DB_PATH = Path("database.db")
 _db_connection = None
@@ -145,14 +145,16 @@ async def get_or_create_user(telegram_id: int, username: str, full_name: str, la
             "watermark_position": "bottom_right"
         }
     
+    user_dict = dict(user)
+
     # Оновлюємо ім'я та юзернейм, якщо вони змінились
-    if user['username'] != username or user['full_name'] != full_name:
+    if user_dict['username'] != username or user_dict['full_name'] != full_name:
         await db.execute('''
             UPDATE users SET username = ?, full_name = ? WHERE telegram_id = ?
         ''', (username, full_name, telegram_id))
         await db.commit()
-        
-    user_dict = dict(user)
+        user_dict['username'] = username
+        user_dict['full_name'] = full_name
     
     # Перевірка на закінчення VIP
     if user_dict.get('vip_until'):
@@ -303,10 +305,15 @@ async def set_guest_yt_quality(telegram_id: int, quality: str):
 async def update_user_settings(telegram_id: int, language_code: str, guest_yt_quality: str, is_anonymous: bool, theme: str, watermark_position: str):
     global _db_connection
     await _db_connection.execute('''
-        UPDATE users 
+        UPDATE users
         SET language_code = ?, guest_yt_quality = ?, is_anonymous = ?, theme = ?, watermark_position = ?
         WHERE telegram_id = ?
     ''', (language_code, guest_yt_quality, is_anonymous, theme, watermark_position, telegram_id))
+    await _db_connection.commit()
+
+async def set_watermark_file_id(telegram_id: int, file_id: str):
+    global _db_connection
+    await _db_connection.execute('UPDATE users SET watermark_file_id = ? WHERE telegram_id = ?', (file_id, telegram_id))
     await _db_connection.commit()
 
 async def add_owned_theme(telegram_id: int, theme: str):

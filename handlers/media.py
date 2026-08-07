@@ -1,5 +1,4 @@
 import asyncio
-import os
 import re
 import time
 import uuid
@@ -11,10 +10,9 @@ from bs4 import BeautifulSoup
 
 from aiogram import Router, F, Bot
 from aiogram.types import (
-    Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo, 
+    Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo,
     InputMediaAudio, InputMediaDocument, InlineQueryResultCachedVideo,
-    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent,
-    InlineKeyboardMarkup, InlineKeyboardButton
+    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent
 )
 
 from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS
@@ -161,7 +159,6 @@ async def btn_save_pdf(message: Message, state: FSMContext):
 
 @media_router.message(PdfState.waiting_for_pdf_url)
 async def process_pdf_url(message: Message, state: FSMContext):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     url = message.text.strip()
     if not url.startswith('http'):
         await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
@@ -225,9 +222,6 @@ async def text_handler(message: Message):
             url = match.group(0)
             
     if url:
-        
-        is_private = message.chat.type == "private"
-        
         # Очищуємо URL, якщо користувач прикріпив тег бота без пробілу
         if bot_me.username and url.endswith(f"@{bot_me.username}"):
             url = url[:-len(f"@{bot_me.username}")]
@@ -355,77 +349,6 @@ async def youtube_callback(callback: CallbackQuery):
         
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
     await start_download(callback.message, url, format_spec, user, is_callback=True)
-
-class PdfState(StatesGroup):
-    waiting_for_pdf_url = State()
-
-def text_matches(key: str):
-    from locales import get_text
-    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
-
-@media_router.message(text_matches('menu_save_pdf'))
-async def btn_save_pdf(message: Message, state: FSMContext):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    tier = user.get('tier', 'free').lower()
-    
-    if tier not in ['pro', 'max']:
-        msg = await message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    msg = await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
-    await state.set_state(PdfState.waiting_for_pdf_url)
-
-@media_router.message(PdfState.waiting_for_pdf_url)
-async def process_pdf_url(message: Message, state: FSMContext):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    url = message.text.strip()
-    if not url.startswith('http'):
-        await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
-        return
-        
-    await state.clear()
-    status_msg = await message.reply("⏳ Завантажую та генерую PDF-документ...")
-    
-    try:
-        from core.pdf_generator import generate_article_pdf
-        from core.utils import temporary_download_session
-        import time
-        from pathlib import Path
-        
-        session_dir = Path(f"downloads/pdf_{time.time_ns()}")
-        
-        async with temporary_download_session(session_dir):
-            output_path = session_dir / "article.pdf"
-            pdf_path, title = await generate_article_pdf(url, output_path)
-            
-            if pdf_path and pdf_path.exists():
-                safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
-                if not safe_title:
-                    safe_title = "Article"
-                    
-                from aiogram.types import FSInputFile
-                fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
-                caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
-                
-                await bot.send_document(
-                    chat_id=message.chat.id,
-                    document=fs_file,
-                    caption=caption,
-                    parse_mode="HTML"
-                )
-                try:
-                    await status_msg.delete()
-                except Exception:
-                    pass
-            else:
-                raise Exception("PDF файл не згенеровано.")
-    except Exception as e:
-        err_str = str(e)
-        if len(err_str) > 500:
-            err_str = err_str[:500] + "..."
-        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
-
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):
@@ -723,27 +646,17 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             
         if success and not is_guest_mode and message.chat.type == "private":
             try:
-                from core.webapp import generate_webapp_url
                 from aiogram.types import MenuButtonDefault
-                
-                bot_info = await bot.get_me()
-                daily_count_updated = await get_daily_download_count(user['telegram_id'])
-                webapp_url = await generate_webapp_url(user, daily_count_updated, bot_info.username)
-                
-                try:
-                    await bot.set_chat_menu_button(
-                        chat_id=target_chat_id, 
-                        menu_button=MenuButtonDefault()
-                    )
-                except Exception:
-                    pass
+                await bot.set_chat_menu_button(
+                    chat_id=target_chat_id,
+                    menu_button=MenuButtonDefault()
+                )
             except Exception:
                 pass
 
 async def process_smart_trim(message: Message, user: dict, url: str, start_sec: int, end_sec: int, status_msg: Message):
     global active_downloads, queue_waiters, active_requests
     lang = user['language_code']
-    tier = user.get('tier', 'free')
 
     if active_requests > 100:
         await bot.edit_message_text(get_text(lang, 'too_many_requests'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
@@ -792,13 +705,7 @@ async def process_smart_trim(message: Message, user: dict, url: str, start_sec: 
                         bot_me = await bot.get_me()
                         caption = await prepare_caption_with_ad(f"✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot_me.username}", user)
                         
-                        from aiogram.types import InputMediaVideo, FSInputFile
-                        media = InputMediaVideo(
-                            media=FSInputFile(output_file),
-                            caption=caption,
-                            parse_mode="HTML"
-                        )
-                        
+                        from aiogram.types import FSInputFile
                         await bot.send_video(chat_id=message.chat.id, video=FSInputFile(output_file), caption=caption, parse_mode="HTML")
                         
                         # Add stats

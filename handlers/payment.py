@@ -4,7 +4,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from core.config import VIP_TARIFFS, PAYMENT_PROVIDER_TOKEN
+from core.config import VIP_TARIFFS
 from core.loader import bot
 from database import get_or_create_user, grant_vip
 from locales import get_text

@@ -19,6 +19,9 @@ if ERROR_LOG_CHANNEL_ID:
 
 BOT_USERNAME = os.getenv("BOT_USERNAME", "MediaDownloaderForGroups_bot").replace('@', '')
 
+# Project root directory
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 # Database path
 DB_PATH = Path("database.db")
 
@@ -47,4 +50,9 @@ VIP_TARIFFS = {
 }
 
 # Paths
-FFMPEG_WIN_PATH = "C:\\Users\\MrMozozavr\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg.Shared_Microsoft.Winget.Source_m18.22.422\\ffmpeg-7.1-full_build-shared\\bin\\ffmpeg.exe"
+# Optional explicit path to a local ffmpeg binary (useful on Windows dev machines
+# where ffmpeg isn't on PATH). Falls back to "ffmpeg" (resolved via PATH) everywhere
+# it's used when this path doesn't exist, so it's safe to leave unset on Linux/servers.
+# NOTE: must never be "" here - Path("").exists() resolves to the cwd and is always
+# True, which would make every call site below think a real ffmpeg binary was found.
+FFMPEG_WIN_PATH = os.getenv("FFMPEG_PATH", "").strip() or "ffmpeg"

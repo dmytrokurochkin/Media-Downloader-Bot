@@ -1,7 +1,7 @@
 import asyncio
 import traceback
 from datetime import datetime
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.types import BufferedInputFile
 from core.config import ERROR_LOG_CHANNEL_ID
 from core.utils import delete_later
 from locales import get_text

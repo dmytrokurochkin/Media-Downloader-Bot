@@ -1,5 +1,4 @@
 import urllib.parse
-import datetime
 from database import get_top_users, get_top_domains, get_user_stats
 from core.config import TIER_LIMITS, ADMIN_IDS, PUBLIC_API_URL
 
@@ -75,7 +74,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
 
     # Build query parameters
     params = {
-        'v': 41, # Cache buster for the HTML file itself
+        'v': 42, # Cache buster for the HTML file itself
         'l': lang,
         't': tier,
         'u': used_downloads,

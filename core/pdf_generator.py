@@ -1,12 +1,11 @@
 import asyncio
 import aiohttp
 from pathlib import Path
-from bs4 import BeautifulSoup
+from typing import Tuple
 from readability import Document
-from weasyprint import HTML, CSS
+from weasyprint import HTML
 
 async def is_safe_url(url: str) -> bool:
-    import socket
     import ipaddress
     from urllib.parse import urlparse
     
@@ -29,7 +28,7 @@ async def is_safe_url(url: str) -> bool:
     except Exception:
         return False
 
-async def generate_article_pdf(url: str, output_path: Path) -> Path:
+async def generate_article_pdf(url: str, output_path: Path) -> Tuple[Path, str]:
     """
     Завантажує HTML-сторінку, витягує головний контент статті за допомогою readability-lxml
     і генерує PDF-файл за допомогою weasyprint.

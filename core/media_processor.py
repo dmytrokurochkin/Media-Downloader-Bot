@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 from typing import Union, List
 
@@ -7,7 +6,7 @@ async def process_watermarks(filepath: Union[Path, List[Path]], user: dict, bot,
     Applies watermarks to videos and images if the user is in the 'Max' tier and has a watermark set.
     Returns the paths to the watermarked files (or original if no watermark applied).
     """
-    if user.get('tier') != 'Max' or not user.get('watermark_file_id'):
+    if user.get('tier') != 'max' or not user.get('watermark_file_id'):
         return filepath
         
     watermark_file_id = user['watermark_file_id']
