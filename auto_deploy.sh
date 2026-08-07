@@ -42,7 +42,13 @@ if [ "$EUID" -ne 0 ]; then
     SUDO="sudo"
 fi
 $SUDO apt-get update
-$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg nodejs curl libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
+$SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git python3 python3-pip python3-venv ffmpeg nodejs curl libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libffi-dev shared-mime-info
+
+# The gdk-pixbuf runtime package was renamed (libgdk-pixbuf2.0-0 -> libgdk-pixbuf-2.0-0)
+# on newer Debian/Ubuntu releases (e.g. Debian 13 "trixie"). Try both names separately
+# so an unknown package name here can't abort the whole apt-get transaction under set -e.
+$SUDO apt-get install -y libgdk-pixbuf-2.0-0 || $SUDO apt-get install -y libgdk-pixbuf2.0-0 || \
+    echo -e "${BLUE}Warning: could not install a gdk-pixbuf package under either known name. PDF export (weasyprint) may not work.${NC}"
 
 # 3. Завантаження та збірка Telegram Bot API (якщо не зібрано)
 echo -e "\n${BLUE}[3/7] Налаштування Telegram Bot API Server...${NC}"
