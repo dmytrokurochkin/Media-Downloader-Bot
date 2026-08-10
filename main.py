@@ -49,7 +49,7 @@ async def main():
     app = create_api_app()
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, None, 8080)
+    site = web.TCPSite(runner, None, 8080, reuse_address=True)
     await site.start()
     logging.info("API Server started on port 8080 (all interfaces)")
     
