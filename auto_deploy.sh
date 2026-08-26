@@ -105,6 +105,11 @@ fi
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+# Self-heal: install the latest yt-dlp into THIS venv.  On a long-running
+# server this is the step that actually repairs a bot whose yt-dlp bit-rotted
+# (the weekly timer keeps it fresh afterwards).  The updater exits non-zero
+# when pip fails, so the warning below really fires instead of being dead.
+./venv/bin/python -m core.yt_dlp_updater || echo "Warning: yt-dlp upgrade failed, keeping the current build (see output above)."
 echo -e "${GREEN}Залежності Python встановлено!${NC}"
 
 # 5. Інформація про cookies
@@ -215,10 +220,66 @@ fi
 
 $SUDO systemctl daemon-reload
 
+# Тижневий апдейтер yt-dlp
+# Keeps YouTube/YouTubeMusic working while the bot stays up for months between
+# restarts.  Upgrading the venv on disk does nothing for an already-running
+# process, so the unit restarts the bot whenever the version actually changes.
+cat > yt-dlp-updater.service <<EOL
+[Unit]
+Description=Upgrade yt-dlp to the latest release
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=${CURRENT_USER}
+WorkingDirectory=${WORK_DIR}
+ExecStart=${WORK_DIR}/venv/bin/python -m core.yt_dlp_updater --restart
+TimeoutStartSec=600
+EOL
+
+cat > yt-dlp-updater.timer <<EOL
+[Unit]
+Description=Weekly yt-dlp upgrade for Media Downloader Bot
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00
+RandomizedDelaySec=1h
+Persistent=true
+Unit=yt-dlp-updater.service
+
+[Install]
+WantedBy=timers.target
+EOL
+
+# install, not mv: mv would preserve the deploying user's ownership, leaving a
+# root-run unit file writable by a non-root account.
+$SUDO install -o root -g root -m 0644 yt-dlp-updater.service yt-dlp-updater.timer /etc/systemd/system/
+rm -f yt-dlp-updater.service yt-dlp-updater.timer
+
+# The updater runs as ${CURRENT_USER}, which cannot restart a system unit on
+# its own -- a bare systemctl restart there hangs on polkit or is denied, so
+# the upgraded build would never be loaded.  Validate with visudo before
+# installing: a malformed drop-in breaks sudo entirely.
+SYSTEMCTL_BIN=$(command -v systemctl)
+cat > yt-dlp-updater.sudoers <<EOL
+${CURRENT_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL_BIN} restart tg-media-bot.service
+EOL
+if $SUDO visudo -cqf yt-dlp-updater.sudoers; then
+    $SUDO install -o root -g root -m 0440 yt-dlp-updater.sudoers /etc/sudoers.d/yt-dlp-updater
+else
+    echo "Warning: sudoers drop-in rejected by visudo; the weekly job will upgrade yt-dlp but cannot restart the bot."
+fi
+rm -f yt-dlp-updater.sudoers
+
+$SUDO systemctl daemon-reload
+
 # 8. Запуск і додавання в автозавантаження
 echo -e "\n${BLUE}[8/8] Запуск сервісів та додавання в автозавантаження...${NC}"
 $SUDO systemctl enable --now telegram-bot-api.service
 $SUDO systemctl enable --now tg-media-bot.service
+# --now: without it the timer stays inactive until the next reboot.
+$SUDO systemctl enable --now yt-dlp-updater.timer
 if [ "$NGROK_ENABLED" -eq 1 ]; then
     $SUDO systemctl enable --now ngrok.service
 fi
