@@ -1,4 +1,8 @@
 aiogram==3.29.1
+# yt-dlp breaks whenever YouTube changes its backend, so it is deliberately
+# left unpinned: core.yt_dlp_updater installs the latest release at deploy
+# time and weekly thereafter.  A pinned floor here would go stale faster than
+# anyone remembers to bump it.
 yt-dlp
 aiohttp
 aiohttp_cors
