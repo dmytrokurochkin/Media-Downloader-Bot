@@ -1,5 +1,10 @@
 aiogram==3.29.1
-yt-dlp
+# yt-dlp breaks whenever YouTube changes its backend.  core.yt_dlp_updater
+# keeps it current at runtime; the floor below is the first version known to
+# work again after the latest YouTube change.  Bump this constant (and the
+# matching MIN_YT_DLP in core/yt_dlp_updater.py) when a new release is the
+# first that works.
+yt-dlp>=2026.8.19
 aiohttp
 aiohttp_cors
 cachetools

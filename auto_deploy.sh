@@ -105,6 +105,10 @@ fi
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+# Self-heal: make sure yt-dlp is at/above the known-good floor in THIS venv.
+# On a long-running server this is the step that actually repairs a bot whose
+# yt-dlp bit-rotted (the weekly timer keeps it fresh afterwards).
+./venv/bin/python -m core.yt_dlp_updater || echo "Warning: yt-dlp upgrade skipped (will keep current build)."
 echo -e "${GREEN}Залежності Python встановлено!${NC}"
 
 # 5. Інформація про cookies
@@ -216,9 +220,42 @@ fi
 $SUDO systemctl daemon-reload
 
 # 8. Запуск і додавання в автозавантаження
+# Weekly yt-dlp updater (keeps YouTube/YouTubeMusic working while the bot
+# stays up for months between restarts).
+$SUDO mkdir -p /etc/systemd/system
+cat > /etc/systemd/system/yt-dlp-updater.service <<EOL
+[Unit]
+Description=Upgrade yt-dlp to the latest release
+After=network.target
+
+[Service]
+Type=oneshot
+User=${CURRENT_USER}
+WorkingDirectory=${WORK_DIR}
+ExecStart=${WORK_DIR}/venv/bin/python -m core.yt_dlp_updater --restart
+TimeoutStartSec=600
+EOL
+
+cat > /etc/systemd/system/yt-dlp-updater.timer <<EOL
+[Timer]
+OnCalendar=Mon *-*-* 03:00
+RandomizedDelaySec=1h
+Persistent=true
+Unit=yt-dlp-updater.service
+
+[Install]
+WantedBy=timers.target
+EOL
+
+$SUDO systemctl daemon-reload
+
+# 9. Запуск і додавання в автозавантаження
 echo -e "\n${BLUE}[8/8] Запуск сервісів та додавання в автозавантаження...${NC}"
 $SUDO systemctl enable --now telegram-bot-api.service
 $SUDO systemctl enable --now tg-media-bot.service
+# Enable the weekly yt-dlp updater (timer drives the one-shot service).
+$SUDO systemctl enable yt-dlp-updater.timer
+$SUDO systemctl daemon-reload
 if [ "$NGROK_ENABLED" -eq 1 ]; then
     $SUDO systemctl enable --now ngrok.service
 fi
