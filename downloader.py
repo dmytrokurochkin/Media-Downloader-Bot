@@ -21,12 +21,20 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
     def run_spotdl():
         env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", NO_COLOR="1", TERM="dumb")
         
+        from core.config import FFMPEG_WIN_PATH
+        from pathlib import Path
+        ffmpeg_winget = Path(FFMPEG_WIN_PATH)
+
         # Використовуємо spotdl save для отримання списку треків, щоб застосувати ліміт 30
         save_file = session_dir / "tracks.spotdl"
         try:
-            subprocess.run([
+            save_cmd = [
                 sys.executable, "-m", "spotdl", "save", url, "--save-file", str(save_file)
-            ], check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
+            ]
+            if ffmpeg_winget.exists():
+                save_cmd.extend(["--ffmpeg", str(ffmpeg_winget)])
+
+            subprocess.run(save_cmd, check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
             
             playlist_limit = TIER_LIMITS[tier]['playlist']
             if save_file.exists() and playlist_limit < 9999:
@@ -56,12 +64,9 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
                 "--audio", "youtube-music", "youtube",
                 "--log-level", "ERROR"
             ]
-            from core.config import FFMPEG_WIN_PATH
-            from pathlib import Path
-            ffmpeg_winget = Path(FFMPEG_WIN_PATH)
             if ffmpeg_winget.exists():
                 cmd.extend(["--ffmpeg", str(ffmpeg_winget)])
-                
+
             subprocess.run(cmd, check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
         except subprocess.CalledProcessError as e:
             err_msg = e.stderr if e.stderr else "Невідома помилка"
@@ -212,13 +217,12 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
     # Формуємо список конфігів для перебору cookies
     browsers = ['brave', 'firefox', 'chrome', 'edge', 'opera', 'safari']
     configs = []
-    
+
     if Path('cookies.txt').exists():
         configs.append({'cookiefile': 'cookies.txt'})
-    else:
-        for b in browsers:
-            configs.append({'cookiesfrombrowser': (b, None, None, None)})
-            
+    for b in browsers:
+        configs.append({'cookiesfrombrowser': (b, None, None, None)})
+
     # Запасний варіант без cookies
     configs.append({})
     
@@ -287,7 +291,13 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
                         
                 if not downloaded_files:
                     raise Exception("Не вдалося завантажити медіа. Можливо, відео видалено, приватне, або має вікові обмеження (18+), а ваш файл cookies.txt застарів. Спробуйте оновити cookies.txt.")
-                
+
+                # Якщо обрано аудіо, але конвертація в mp3 не відбулась (ffmpeg недоступний
+                # або постпроцесор впав), не надсилаємо сирий файл (напр. .webm) мовчки.
+                if 'bestaudio' in format_spec and 'bestvideo' not in format_spec:
+                    if not any(f.suffix.lower() == '.mp3' for f in downloaded_files):
+                        raise Exception('FFMPEG_CONVERSION_FAILED')
+
                 # Сортуємо файли за часом створення, щоб зберігався порядок плейлиста
                 downloaded_files.sort(key=lambda x: x.stat().st_mtime)
                 
@@ -298,9 +308,11 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         except Exception as e:
             if str(e) == 'SIZE_LIMIT_EXCEEDED':
                 raise e
+            if str(e) == 'FFMPEG_CONVERSION_FAILED':
+                raise Exception("Не вдалося конвертувати аудіо в mp3. Перевірте, що ffmpeg встановлений і FFMPEG_PATH у .env вказує на існуючий файл.")
             last_error = e
             print(f"Помилка yt-dlp з конфігом {config}: {e}")
-            
+
     # Якщо всі спроби провалились
     if last_error:
         err_msg = str(last_error)

@@ -303,7 +303,7 @@ async def process_url(message: Message, url: str, user: dict, is_guest_mode: boo
         await start_download(message, url, fmt, user, is_guest_mode=is_guest_mode, state=state)
 
 @media_router.callback_query(F.data.startswith("yt_"))
-async def youtube_callback(callback: CallbackQuery):
+async def youtube_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     
     action = callback.data.split('_')[1]
@@ -348,7 +348,7 @@ async def youtube_callback(callback: CallbackQuery):
         return
         
     await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
-    await start_download(callback.message, url, format_spec, user, is_callback=True)
+    await start_download(callback.message, url, format_spec, user, is_callback=True, state=state)
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):
@@ -379,8 +379,7 @@ async def cover_photo_handler(message: Message, state: FSMContext):
     
     url = state_data.get('url')
     await state.set_state(None)
-    
-    message.text = url
+
     await process_url(message, url, user, is_guest_mode=False, state=state)
 
 async def prepare_caption_with_ad(original_caption: str, user: dict) -> str:
@@ -671,7 +670,6 @@ async def process_smart_trim(message: Message, user: dict, url: str, start_sec: 
         from handlers.media import download_semaphore
         if download_semaphore is None:
             # Init semaphore if not already
-            import asyncio
             from core.config import MAX_CONCURRENT_DOWNLOADS
             from handlers import media
             media.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)

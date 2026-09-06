@@ -1,4 +1,5 @@
 import html
+import traceback
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
@@ -228,12 +229,6 @@ async def web_app_data_handler(message: Message, state: FSMContext):
                     text = "🖼 Wyślij zdjęcie na okładkę utworu (jako zdjęcie, nie jako plik)."
                 await message.answer(text)
             else:
-                message.text = url # Hack to reuse process_url logic but we need to pass metadata
-                # Since process_url uses message.text to find url, we will just call process_url with url
-                # Wait, process_url doesn't take metadata yet. We need a way to pass metadata.
-                # Let's use a temporary state or pass kwargs. For now, since process_url is complex,
-                # we can store metadata in state and pass the state, or add kwargs to process_url.
-                # Let's store metadata in state and clear state after download starts.
                 await state.update_data(
                     edit_tags=True,
                     title=title,
@@ -244,6 +239,17 @@ async def web_app_data_handler(message: Message, state: FSMContext):
                 await process_url(message, url, user, is_guest_mode=False, state=state)
     except Exception as e:
         print("Error handling web_app_data:", e)
+        traceback.print_exc()
+        try:
+            text = f"⚠️ Помилка: {html.escape(str(e))}"
+            if user['language_code'] == 'en':
+                text = f"⚠️ Error: {html.escape(str(e))}"
+            elif user['language_code'] == 'pl':
+                text = f"⚠️ Błąd: {html.escape(str(e))}"
+            msg = await message.answer(text)
+            asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        except Exception:
+            pass
 
 @user_router.message(WatermarkState.waiting_for_photo, F.photo | F.document)
 async def watermark_photo_handler(message: Message, state: FSMContext):

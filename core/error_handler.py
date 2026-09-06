@@ -1,4 +1,5 @@
 import asyncio
+import html
 import traceback
 from datetime import datetime
 from aiogram.types import BufferedInputFile
@@ -32,7 +33,7 @@ async def handle_media_error(e: Exception, bot, status_msg, url: str, user: dict
 
         
     try:
-        await bot.edit_message_text(get_text(lang, 'download_error', error=error_msg), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        await bot.edit_message_text(get_text(lang, 'download_error', error=html.escape(error_msg)), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
     except Exception:
         pass
