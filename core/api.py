@@ -1,24 +1,34 @@
 from aiohttp import web
 import aiohttp_cors
 from database import search_users_query, get_public_profile
+from core.telegram_auth import validate_init_data
+
+def _require_valid_init_data(request: web.Request) -> bool:
+    return validate_init_data(request.query.get('initData', ''))
 
 async def search_users_handler(request: web.Request) -> web.Response:
+    if not _require_valid_init_data(request):
+        return web.json_response({'error': 'Unauthorized'}, status=401)
+
     query = request.query.get('q', '').strip()
     if not query:
         return web.json_response({'error': 'Missing query parameter "q"'}, status=400)
-    
+
     results = await search_users_query(query)
     return web.json_response({'results': results})
 
 async def get_profile_handler(request: web.Request) -> web.Response:
+    if not _require_valid_init_data(request):
+        return web.json_response({'error': 'Unauthorized'}, status=401)
+
     user_id_str = request.query.get('id', '')
     if not user_id_str.isdigit():
         return web.json_response({'error': 'Invalid user ID'}, status=400)
-        
+
     profile = await get_public_profile(int(user_id_str))
     if not profile:
         return web.json_response({'error': 'Профіль приховано або не знайдено'}, status=404)
-        
+
     return web.json_response({'profile': profile})
 
 def create_api_app() -> web.Application:
