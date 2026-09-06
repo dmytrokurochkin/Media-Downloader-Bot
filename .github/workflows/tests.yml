@@ -9,6 +9,15 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    env:
+      # core/loader.py constructs a real aiogram Bot(token=BOT_TOKEN, ...) at import
+      # time, and aiogram validates the token's shape (digits:alphanumeric) even
+      # without hitting the network. Every other setting in core/config.py has a
+      # safe default, but BOT_TOKEN doesn't, so it must be set here or test
+      # collection fails for any module that imports a handler. This is a
+      # syntactically-valid placeholder, not a real token - never use the real
+      # BOT_TOKEN as a CI secret.
+      BOT_TOKEN: "123456:FAKE-TOKEN-FOR-CI-0000000000"
 
     steps:
       - name: Checkout
