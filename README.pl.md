@@ -8,6 +8,12 @@
 </div>
 
 <p align="center">
+  <a href="https://github.com/dmytrokurochkin/Media-Downloader-Bot/actions/workflows/tests.yml">
+    <img src="https://github.com/dmytrokurochkin/Media-Downloader-Bot/actions/workflows/tests.yml/badge.svg" alt="Tests" />
+  </a>
+</p>
+
+<p align="center">
   <a href="https://t.me/SaveMDLBot">
     <img src="https://img.shields.io/badge/Wypróbuj_Bota-@SaveMDLBot-0088cc?style=for-the-badge&logo=telegram&logoColor=white" alt="Test Bot" />
   </a>
