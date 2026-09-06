@@ -60,7 +60,7 @@ Projekt zawiera zintegrowaną **Telegram Mini App** (Web App) z nowoczesnym inte
 
 ### 1. Klonowanie repozytorium
 ```bash
-git clone https://github.com/your-username/Media-Downloader-Bot.git
+git clone https://github.com/dmytrokurochkin/Media-Downloader-Bot.git
 cd Media-Downloader-Bot
 ```
 
@@ -93,7 +93,7 @@ python main.py
 Repozytorium zawiera skrypt do automatycznego wdrożenia bota razem z lokalnym serwerem Telegram API. Skrypt samodzielnie zainstaluje wymagane zależności, skompiluje serwer, utworzy wirtualne środowisko Python i skonfiguruje odpowiednie usługi `systemd`.
 
 ```bash
-git clone https://github.com/your-username/Media-Downloader-Bot.git
+git clone https://github.com/dmytrokurochkin/Media-Downloader-Bot.git
 cd Media-Downloader-Bot
 chmod +x auto_deploy.sh
 ./auto_deploy.sh

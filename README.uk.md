@@ -60,7 +60,7 @@
 
 ### 1. Клонування репозиторію
 ```bash
-git clone https://github.com/your-username/Media-Downloader-Bot.git
+git clone https://github.com/dmytrokurochkin/Media-Downloader-Bot.git
 cd Media-Downloader-Bot
 ```
 
@@ -93,7 +93,7 @@ python main.py
 У репозиторії передбачено скрипт для автоматичного розгортання бота разом із локальним сервером Telegram API. Скрипт самостійно встановить необхідні залежності, скомпілює сервер, створить віртуальне середовище Python та налаштує відповідні сервіси `systemd`.
 
 ```bash
-git clone https://github.com/your-username/Media-Downloader-Bot.git
+git clone https://github.com/dmytrokurochkin/Media-Downloader-Bot.git
 cd Media-Downloader-Bot
 chmod +x auto_deploy.sh
 ./auto_deploy.sh
