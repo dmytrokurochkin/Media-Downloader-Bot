@@ -1,92 +1,96 @@
-><div align="center">
+<p align="center">
+  <b>🇬🇧 English</b> | <a href="README.uk.md">🇺🇦 Українська</a> | <a href="README.pl.md">🇵🇱 Polski</a>
+</p>
+
+<div align="center">
   <h1>🚀 Media Downloader Bot</h1>
-  <p>Функціональний Telegram-бот для завантаження мультимедійного контенту з популярних платформ та соціальних мереж.</p>
+  <p>A full-featured Telegram bot for downloading media content from popular platforms and social networks.</p>
 </div>
 
 <p align="center">
   <a href="https://t.me/SaveMDLBot">
-    <img src="https://img.shields.io/badge/Спробувати_Бота-@SaveMDLBot-0088cc?style=for-the-badge&logo=telegram&logoColor=white" alt="Test Bot" />
+    <img src="https://img.shields.io/badge/Try_the_Bot-@SaveMDLBot-0088cc?style=for-the-badge&logo=telegram&logoColor=white" alt="Test Bot" />
   </a>
 </p>
 
-## 📖 Про проєкт
+## 📖 About the project
 
-**Media Downloader Bot** — це сучасний Telegram-бот, розроблений на базі Python (Aiogram 3), який надає користувачам можливість зручно завантажувати відео, аудіо та зображення з таких платформ, як YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook та GitHub.
+**Media Downloader Bot** is a modern Telegram bot built on Python (Aiogram 3) that lets users conveniently download video, audio, and images from platforms such as YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook, and GitHub.
 
-Проєкт включає інтегрований **Telegram Mini App** (Web App) із сучасним інтерфейсом, де користувачі можуть переглядати власну статистику, ліміти, рейтинги та оформлювати VIP-доступ за допомогою внутрішньої валюти **Telegram Stars**. Для забезпечення стабільної роботи з великими файлами (до 2 ГБ) використовується локальний сервер Telegram Bot API.
-
----
-
-## ✨ Основні можливості
-
-- 🎬 **YouTube та YouTube Music**: Завантаження відео та аудіофайлів у найвищій доступній якості (з використанням `yt-dlp`).
-- 📸 **Instagram, Facebook та TikTok**: Збереження відео (Reels, TikTok), дописів та каруселей (з використанням `gallery-dl` та `yt-dlp`).
-- 🧵 **Threads**: Нативна підтримка завантаження мультимедійного контенту.
-- 🎵 **Spotify**: Завантаження окремих треків та плейлистів зі збереженням метаданих та обкладинок (з використанням `spotdl`).
-- 🎧 **SoundCloud**: Швидке завантаження аудіотреків та музичних сетів у високій якості.
-- 💻 **GitHub**: Швидке завантаження вихідного коду репозиторіїв у форматі `.zip`.
-- 📱 **Сучасний Web App**: Інтегрований міні-додаток, який містить профіль користувача, таблицю лідерів та розділ підписок.
-- 💎 **Монетизація**: Вбудована система рівнів доступу (Free, Pro, Max, VIP) та підтримка платежів через Telegram Stars.
-- 🚀 **Обробка великих файлів**: Можливість завантаження та надсилання файлів розміром до 2 ГБ завдяки використанню локального сервера Telegram Bot API.
+The project includes an integrated **Telegram Mini App** (Web App) with a modern interface, where users can view their own stats, limits, leaderboards, and purchase VIP access using **Telegram Stars**. A local Telegram Bot API server is used to reliably handle large files (up to 2 GB).
 
 ---
 
-## 🖼️ Демонстрація роботи
+## ✨ Key features
 
-| Головне меню та Mini App | Таблиця лідерів (Leaderboard) | VIP Магазин (Store) |
+- 🎬 **YouTube and YouTube Music**: Download videos and audio files in the highest available quality (using `yt-dlp`).
+- 📸 **Instagram, Facebook, and TikTok**: Save videos (Reels, TikTok), posts, and carousels (using `gallery-dl` and `yt-dlp`).
+- 🧵 **Threads**: Native support for downloading media content.
+- 🎵 **Spotify**: Download individual tracks and playlists with metadata and cover art preserved (using `spotdl`).
+- 🎧 **SoundCloud**: Fast downloading of audio tracks and music sets in high quality.
+- 💻 **GitHub**: Quick download of repository source code as a `.zip` file.
+- 📱 **Modern Web App**: An integrated mini app featuring a user profile, leaderboard, and subscription section.
+- 💎 **Monetization**: Built-in tier system (Free, Pro, Max, VIP) with payment support via Telegram Stars.
+- 🚀 **Large file handling**: Download and send files up to 2 GB in size thanks to a local Telegram Bot API server.
+
+---
+
+## 🖼️ Demo
+
+| Main menu & Mini App | Leaderboard | VIP Store |
 | :---: | :---: | :---: |
 | <img src="assets/demo-webapp.jpg" width="250" /> | <img src="assets/demo-leaderboard.jpg" width="250" /> | <img src="assets/demo-store.jpg" width="250" /> |
-| **Завантаження з YouTube** | **Музика зі Spotify** | **Guest Mode** |
+| **Downloading from YouTube** | **Music from Spotify** | **Guest Mode** |
 | <img src="assets/demo-youtube.jpg" width="250" /> | <img src="assets/demo-spotify.jpg" width="250" /> | <img src="assets/demo-guest.jpg" width="250" /> |
 
 ---
 
-## 🛠 Технологічний стек
+## 🛠 Tech stack
 
 - **Backend**: Python 3.10+, [Aiogram 3](https://docs.aiogram.dev/en/latest/)
-- **База даних**: SQLite (з використанням `aiosqlite`)
-- **Компоненти завантаження**: `yt-dlp`, `gallery-dl`, `spotdl`
-- **Обробка медіа**: `FFmpeg`, `mutagen`, `Pillow`
+- **Database**: SQLite (using `aiosqlite`)
+- **Download components**: `yt-dlp`, `gallery-dl`, `spotdl`
+- **Media processing**: `FFmpeg`, `mutagen`, `Pillow`
 - **Frontend (Web App)**: HTML5, CSS3, Vanilla JS
-- **Інфраструктура**: Локальний [Telegram Bot API Server](https://github.com/tdlib/telegram-bot-api)
+- **Infrastructure**: Local [Telegram Bot API Server](https://github.com/tdlib/telegram-bot-api)
 
 ---
 
-## ⚙️ Локальне розгортання
+## ⚙️ Local deployment
 
-### 1. Клонування репозиторію
+### 1. Clone the repository
 ```bash
 git clone https://github.com/your-username/Media-Downloader-Bot.git
 cd Media-Downloader-Bot
 ```
 
-### 2. Налаштування середовища
-Створіть файл `.env` у кореневій директорії проєкту та заповніть його наступними даними:
+### 2. Configure the environment
+Create a `.env` file in the project root and fill it in with the following data:
 ```env
-BOT_TOKEN=ваш_токен_бота
+BOT_TOKEN=your_bot_token
 LOCAL_API_SERVER_URL=http://127.0.0.1:8081
-API_ID=ваш_api_id
-API_HASH=ваш_api_hash
+API_ID=your_api_id
+API_HASH=your_api_hash
 ```
 
-### 3. Встановлення залежностей
-Переконайтеся, що у вашій системі встановлено `ffmpeg`.
+### 3. Install dependencies
+Make sure `ffmpeg` is installed on your system.
 ```bash
 python -m venv venv
-source venv/bin/activate  # Для Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Запуск бота
+### 4. Run the bot
 ```bash
 python main.py
 ```
 
 ---
 
-## 🚀 Розгортання на сервері (Ubuntu/Debian)
+## 🚀 Server deployment (Ubuntu/Debian)
 
-У репозиторії передбачено скрипт для автоматичного розгортання бота разом із локальним сервером Telegram API. Скрипт самостійно встановить необхідні залежності, скомпілює сервер, створить віртуальне середовище Python та налаштує відповідні сервіси `systemd`.
+The repository includes a script for automatically deploying the bot together with the local Telegram API server. The script installs the required dependencies, builds the server, creates a Python virtual environment, and configures the corresponding `systemd` services.
 
 ```bash
 git clone https://github.com/your-username/Media-Downloader-Bot.git
@@ -95,18 +99,18 @@ chmod +x auto_deploy.sh
 ./auto_deploy.sh
 ```
 
-Після успішного виконання скрипта бот працюватиме у фоновому режимі безперервно.
-Для перевірки журналів (логів) системи скористайтеся командою:
+Once the script completes successfully, the bot will run continuously in the background.
+To check the system logs, use:
 ```bash
 sudo journalctl -u tg-media-bot -f
 ```
 
-## ⚠️ Правова інформація (Disclaimer)
+## ⚠️ Legal information (Disclaimer)
 
-Цей проєкт розроблено **виключно в навчальних та дослідницьких цілях**, як демонстрацію можливостей створення ботів, взаємодії з API та обробки медіафайлів.  
-Автори та контриб'ютори не несуть жодної відповідальності за використання цього програмного забезпечення кінцевими користувачами у спосіб, що може порушувати авторські права, закони будь-якої країни або умови надання послуг (Terms of Service) сторонніх платформ. Завантажуючи контент, ви зобов'язані дотримуватися законодавства та поважати права авторів.
+This project was developed **strictly for educational and research purposes**, as a demonstration of building bots, working with APIs, and processing media files.
+The authors and contributors bear no responsibility for any use of this software by end users in a manner that may infringe copyright, violate the laws of any country, or breach the Terms of Service of third-party platforms. When downloading content, you are responsible for complying with applicable law and respecting the rights of content creators.
 
 ---
 
-## 🤝 Внесок у проєкт
-Ми вітаємо будь-який внесок у розвиток проєкту. Для впровадження значних змін, будь ласка, спершу створіть issue для обговорення запропонованих нововведень.
+## 🤝 Contributing
+We welcome any contribution to the project's development. For significant changes, please open an issue first to discuss what you would like to change.
