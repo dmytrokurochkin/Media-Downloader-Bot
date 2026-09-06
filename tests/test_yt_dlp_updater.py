@@ -122,7 +122,7 @@ def test_ensure_installs_even_when_a_version_is_already_present(
 # --- _restart_bot ---
 
 def test_restart_uses_sudo_when_not_root(monkeypatch):
-    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000, raising=False)
     monkeypatch.setattr(yt_dlp_updater.shutil, "which", lambda _: "/usr/bin/systemctl")
     seen = {}
 
@@ -138,7 +138,7 @@ def test_restart_uses_sudo_when_not_root(monkeypatch):
 
 
 def test_restart_skips_sudo_when_root(monkeypatch):
-    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(yt_dlp_updater.shutil, "which", lambda _: "/usr/bin/systemctl")
     seen = {}
 
@@ -153,7 +153,7 @@ def test_restart_skips_sudo_when_root(monkeypatch):
 
 
 def test_restart_reports_failure_when_denied(monkeypatch, capsys):
-    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000, raising=False)
     monkeypatch.setattr(
         yt_dlp_updater.subprocess,
         "run",
@@ -167,7 +167,7 @@ def test_restart_does_not_hang_on_timeout(monkeypatch, capsys):
     def timeout(cmd, **k):
         raise subprocess.TimeoutExpired(cmd, 60)
 
-    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(yt_dlp_updater.os, "geteuid", lambda: 1000, raising=False)
     monkeypatch.setattr(yt_dlp_updater.subprocess, "run", timeout)
     assert yt_dlp_updater._restart_bot() is False
     assert "Could not restart" in capsys.readouterr().err
