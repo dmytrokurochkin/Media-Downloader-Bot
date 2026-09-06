@@ -2,6 +2,16 @@ cookies.txt
 tqueue.binlog
 webhooks_db.binlog
 td.binlog
+
+# Dev-session runtime artifacts (local process tracking, QA scratch files)
+bot_pid.txt
+ngrok_pid.txt
+bot_stdout.log
+bot_stderr.log
+ngrok_stdout.log
+ngrok_stderr.log
+qa_test_logo.png
+.impeccable/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
