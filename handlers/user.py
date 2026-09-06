@@ -279,6 +279,12 @@ async def watermark_photo_handler(message: Message, state: FSMContext):
     msg = await message.answer(text)
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
 
+@user_router.message(Command("language"))
+async def language_command(message: Message):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    msg = await message.reply("Choose your language / Оберіть мову / Wybierz język:", reply_markup=get_lang_keyboard())
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+
 @user_router.callback_query(F.data == "set_lang")
 async def settings_set_lang(callback: CallbackQuery):
     await callback.message.edit_text("Choose your language / Оберіть мову / Wybierz język:", reply_markup=get_lang_keyboard())
