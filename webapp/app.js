@@ -366,6 +366,9 @@ function applyTranslations() {
     const labelGuestQuality = document.getElementById('label_guest_quality');
     if (labelGuestQuality) labelGuestQuality.innerText = getText(lang, 'label_guest_quality');
     
+    const optQualityBest = document.getElementById('opt_quality_best');
+    if (optQualityBest) optQualityBest.innerText = getText(lang, 'opt_quality_best');
+
     const labelTheme = document.getElementById('label_theme');
     if (labelTheme) labelTheme.innerText = getText(lang, 'label_theme');
     
