@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.base import StorageKey
 
 from handlers.user import web_app_data_handler, watermark_photo_handler, WatermarkState
+from core.media_processor import watermark_armed
 
 
 class _FakeMessage(Message):
@@ -108,7 +109,10 @@ async def test_watermark_photo_handler_saves_file_id_from_photo(db, monkeypatch)
     user = await db.get_or_create_user(111, "u", "U", "en")
     assert user["watermark_file_id"] == "large_file_id"
     assert await state.get_state() is None
-    answer_mock.assert_awaited_once()
+    # Saved-confirmation + armed-for-next-download confirmation (max tier only).
+    assert answer_mock.await_count == 2
+    assert 111 in watermark_armed
+    watermark_armed.discard(111)
 
 
 async def test_watermark_photo_handler_accepts_image_document(db, monkeypatch):

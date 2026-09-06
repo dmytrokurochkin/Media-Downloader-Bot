@@ -122,13 +122,35 @@ async def hide_keyboard_handler(message: Message, state: FSMContext):
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.message(Command('settings'))
-@user_router.message(text_matches('menu_settings'))
 async def settings_command(message: Message, state: FSMContext):
     asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     text = get_text(user['language_code'], 'settings_menu_text')
     msg = await message.reply(text, reply_markup=get_settings_main_keyboard(user['language_code']))
+    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+
+@user_router.message(Command('watermark'))
+@user_router.message(text_matches('menu_watermark'))
+async def watermark_button_handler(message: Message, state: FSMContext):
+    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+
+    if user.get('tier') != 'max':
+        msg = await message.reply(get_text(lang, 'watermark_max_only'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        return
+
+    if not user.get('watermark_file_id'):
+        await state.set_state(WatermarkState.waiting_for_photo)
+        msg = await message.reply(get_text(lang, 'send_watermark_photo'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+        return
+
+    from core.media_processor import watermark_armed
+    watermark_armed.add(message.from_user.id)
+    msg = await message.reply(get_text(lang, 'watermark_armed'))
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
 
 @user_router.message(F.web_app_data)
@@ -163,12 +185,7 @@ async def web_app_data_handler(message: Message, state: FSMContext):
                     msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
                     asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
                 else:
-                    text = "⭐️ Автоматичне брендування (водяний знак) доступне лише для тарифу Max."
-                    if language == 'en':
-                        text = "⭐️ Auto-branding (watermark) is only available for the Max tier."
-                    elif language == 'pl':
-                        text = "⭐️ Automatyczne znakowanie (znak wodny) jest dostępne tylko w planie Max."
-                    msg2 = await message.answer(text)
+                    msg2 = await message.answer(get_text(language, 'watermark_max_only'))
                     asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 30))
         elif data.get('action') == 'buy_theme':
             theme = data.get('theme')
@@ -271,13 +288,19 @@ async def watermark_photo_handler(message: Message, state: FSMContext):
     await set_watermark_file_id(message.from_user.id, file_id)
     await state.clear()
 
-    text = "✅ Логотип збережено! Він буде додаватись до ваших відео та фото."
+    text = "✅ Логотип збережено!"
     if user['language_code'] == 'en':
-        text = "✅ Logo saved! It will now be added to your videos and photos."
+        text = "✅ Logo saved!"
     elif user['language_code'] == 'pl':
-        text = "✅ Logo zapisane! Będzie teraz dodawane do Twoich filmów i zdjęć."
+        text = "✅ Logo zapisane!"
     msg = await message.answer(text)
     asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+
+    if user.get('tier') == 'max':
+        from core.media_processor import watermark_armed
+        watermark_armed.add(message.from_user.id)
+        msg2 = await message.answer(get_text(user['language_code'], 'watermark_armed'))
+        asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 60))
 
 @user_router.message(Command("language"))
 async def language_command(message: Message):
@@ -433,7 +456,7 @@ async def process_support_message(message: Message, state: FSMContext, bot: Bot)
         known_buttons.extend([
             get_text(lang, 'menu_profile'),
             get_text(lang, 'menu_download'),
-            get_text(lang, 'menu_settings'),
+            get_text(lang, 'menu_watermark'),
             get_text(lang, 'menu_help'),
             get_text(lang, 'menu_vip'),
             get_text(lang, 'menu_hide_keyboard')

@@ -14,7 +14,7 @@ def get_main_keyboard(lang: str, webapp_url: str = None) -> ReplyKeyboardMarkup:
         builder.button(text=get_text(lang, 'menu_profile'))
         
     builder.button(text=get_text(lang, 'menu_vip'))
-    builder.button(text=get_text(lang, 'menu_settings'))
+    builder.button(text=get_text(lang, 'menu_watermark'))
     builder.button(text=get_text(lang, 'menu_help'))
     builder.button(text=get_text(lang, 'menu_save_pdf'))
     builder.button(text=get_text(lang, 'menu_hide_keyboard'))

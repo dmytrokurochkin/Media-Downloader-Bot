@@ -1,14 +1,24 @@
 from pathlib import Path
 from typing import Union, List
 
+# Telegram IDs who explicitly asked (via the watermark button) for the watermark
+# to be applied to their next download. One-shot: consumed as soon as it's checked.
+watermark_armed = set()
+
 async def process_watermarks(filepath: Union[Path, List[Path]], user: dict, bot, session_dir: Path) -> Union[Path, List[Path]]:
     """
-    Applies watermarks to videos and images if the user is in the 'Max' tier and has a watermark set.
+    Applies watermarks to videos and images if the user is on the 'Max' tier, has a
+    watermark set, and explicitly armed it for this download via the watermark button.
     Returns the paths to the watermarked files (or original if no watermark applied).
     """
-    if user.get('tier') != 'max' or not user.get('watermark_file_id'):
+    telegram_id = user.get('telegram_id')
+    armed = telegram_id in watermark_armed
+    if armed:
+        watermark_armed.discard(telegram_id)
+
+    if not armed or user.get('tier') != 'max' or not user.get('watermark_file_id'):
         return filepath
-        
+
     watermark_file_id = user['watermark_file_id']
     watermark_pos = user.get('watermark_position', 'bottom_right')
     
