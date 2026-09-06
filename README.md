@@ -119,4 +119,4 @@ The authors and contributors bear no responsibility for any use of this software
 ---
 
 ## 🤝 Contributing
-We welcome any contribution to the project's development. For significant changes, please open an issue first to discuss what you would like to change.
+We welcome any contribution to the project's development. For significant changes, please open an issue first to discuss what you would like to change. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up a dev environment, run the tests, and submit a pull request. Please also follow our [Code of Conduct](CODE_OF_CONDUCT.md). Found a security issue? See [SECURITY.md](SECURITY.md).

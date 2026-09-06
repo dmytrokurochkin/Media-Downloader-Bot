@@ -119,4 +119,4 @@ Autorzy i współtwórcy nie ponoszą żadnej odpowiedzialności za wykorzystani
 ---
 
 ## 🤝 Współtworzenie
-Zapraszamy do wszelkiego wkładu w rozwój projektu. W przypadku istotnych zmian prosimy najpierw utworzyć issue, aby omówić proponowane zmiany.
+Zapraszamy do wszelkiego wkładu w rozwój projektu. W przypadku istotnych zmian prosimy najpierw utworzyć issue, aby omówić proponowane zmiany. Zobacz [CONTRIBUTING.md](CONTRIBUTING.md) (po angielsku), aby dowiedzieć się, jak skonfigurować środowisko deweloperskie, uruchomić testy i zgłosić pull request. Prosimy również przestrzegać naszego [Kodeksu postępowania](CODE_OF_CONDUCT.md). Znalazłeś lukę bezpieczeństwa? Zobacz [SECURITY.md](SECURITY.md).
