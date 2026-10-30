@@ -1,6 +1,43 @@
 const tg = window.Telegram.WebApp;
 
-let hapticEnabled = localStorage.getItem('hapticEnabled') !== 'false';
+// localStorage у деяких WebView кидає виняток (приватний режим, вимкнене сховище),
+// тож усі звернення до нього — через ці обгортки.
+function storageGet(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function storageSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* не критично */ }
+}
+
+let hapticEnabled = storageGet('hapticEnabled') !== 'false';
+
+// Імена й домени в лідерборді та пошуку — це текст, який ввели користувачі
+// (ім'я в Telegram може містити будь-які символи, зокрема HTML). Тому дані
+// вставляються ЛИШЕ через textContent; innerHTML з ними = stored XSS, а з
+// Mini App, запущеної з reply-кнопки, скрипт міг би слати боту sendData від
+// імені жертви.
+function createEl(tag, options) {
+    const node = document.createElement(tag);
+    const opts = options || {};
+    if (opts.className) node.className = opts.className;
+    if (opts.text !== undefined && opts.text !== null) node.textContent = String(opts.text);
+    if (opts.style) node.setAttribute('style', opts.style);
+    return node;
+}
+
+function showListMessage(list, text, style) {
+    list.textContent = '';
+    list.appendChild(createEl('li', { text: text, style: style }));
+}
+
+// initData іде в заголовку, а не в query string: query потрапляє в access-логи
+// сервера й ngrok, а initData дійсний 24 години.
+function apiHeaders() {
+    return {
+        'ngrok-skip-browser-warning': 'true',
+        'Authorization': 'tma ' + (tg.initData || '')
+    };
+}
 
 function triggerHaptic(style) {
     if (hapticEnabled) {
@@ -87,6 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
+    bindUiEvents();
     applyTranslations();
     renderProfile();
     renderLeaderboards();
@@ -103,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggle.checked = hapticEnabled;
         toggle.addEventListener('change', (e) => {
             hapticEnabled = e.target.checked;
-            localStorage.setItem('hapticEnabled', hapticEnabled);
+            storageSet('hapticEnabled', hapticEnabled);
             triggerHaptic('medium');
         });
     }
@@ -131,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const btn = document.getElementById('btn_save_settings');
             if (btn) {
                 if (!ownedThemes.includes(e.target.value)) {
-                    btn.innerText = "Купити за 50 ⭐️";
+                    btn.innerText = getText(lang, 'buy_theme_btn');
                 } else {
                     btn.innerText = getText(lang, 'btn_save_settings') || "Save settings";
                 }
@@ -315,7 +353,69 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// Обробники подій вішаються тут, а не атрибутами onclick в index.html:
+// Content-Security-Policy сторінки забороняє inline-скрипти (захист від XSS).
+function bindUiEvents() {
+    const bindClick = (id, handler) => {
+        const node = document.getElementById(id);
+        if (node) node.addEventListener('click', handler);
+    };
+    bindClick('buyVipBtn', buyVip);
+    bindClick('btn_smart_trim', submitSmartTrim);
+    bindClick('btn_audio_editor', submitAudioEditor);
+    bindClick('btn_save_settings', saveSettings);
+    bindClick('closeProfileModalBtn', closeProfileModal);
+    bindClick('closeBadgeModalBtn', closeBadgeModal);
+
+    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab, btn));
+    });
+
+    const badgeModal = document.getElementById('badgeInfoModal');
+    if (badgeModal) {
+        badgeModal.addEventListener('click', (e) => {
+            if (e.target === badgeModal) closeBadgeModal();
+        });
+    }
+
+    const bindFileName = (inputId, labelId) => {
+        const input = document.getElementById(inputId);
+        const label = document.getElementById(labelId);
+        if (!input || !label) return;
+        input.addEventListener('change', () => {
+            label.textContent = input.files.length ? input.files[0].name : getText(lang, 'no_file_chosen');
+        });
+    };
+    bindFileName('editor_cover', 'editor_cover_name');
+    bindFileName('settings_watermark_file', 'settings_watermark_name');
+}
+
+function setTextById(id, key) {
+    const node = document.getElementById(id);
+    if (node) node.innerText = getText(lang, key);
+}
+
+function setPlaceholderById(id, key) {
+    const node = document.getElementById(id);
+    if (node) node.placeholder = getText(lang, key);
+}
+
 function applyTranslations() {
+    // Статичні підписи, що раніше були захардкоджені українською в index.html.
+    setTextById('label_editor_url', 'label_editor_url');
+    setTextById('label_editor_title', 'label_editor_title');
+    setTextById('label_editor_artist', 'label_editor_artist');
+    setTextById('label_editor_album', 'label_editor_album');
+    setTextById('label_editor_cover', 'label_editor_cover');
+    setTextById('label_editor_cover_hint', 'label_editor_cover_hint');
+    setTextById('label_modal_downloads', 'modal_downloads');
+    setTextById('label_modal_traffic', 'modal_traffic');
+    setTextById('label_modal_badges', 'label_badges_main');
+    setPlaceholderById('userSearchInput', 'search_placeholder');
+    setPlaceholderById('editor_title', 'placeholder_track_title');
+    setPlaceholderById('editor_artist', 'placeholder_track_artist');
+    setPlaceholderById('editor_album', 'placeholder_track_album');
+
     document.getElementById('pageTitle').innerText = getText(lang, 'title_profile');
     document.getElementById('label_stat_downloads').innerText = getText(lang, 'stat_daily_limit');
     document.getElementById('label_limit_size').innerText = getText(lang, 'limit_size');
@@ -560,7 +660,7 @@ function renderProfile() {
 function renderBadgesGrid(containerId, profile) {
     const badgesGrid = document.getElementById(containerId);
     if (!badgesGrid) return;
-    badgesGrid.innerHTML = '';
+    badgesGrid.textContent = '';
     const badgeKeys = Object.keys(ALL_BADGES);
     if (badgeKeys.length > 0) {
         badgeKeys.forEach(b => {
@@ -580,47 +680,57 @@ function renderBadgesGrid(containerId, profile) {
             badgesGrid.appendChild(el);
         });
     } else {
-        badgesGrid.innerHTML = '<span style="opacity: 0.5; font-size: 0.85rem;">Немає бейджів</span>';
+        badgesGrid.appendChild(createEl('span', { text: getText(lang, 'no_badges'), style: 'opacity: 0.5; font-size: 0.85rem;' }));
     }
+}
+
+// Рядок рейтингу: «#N  ім'я/домен  значення». Усе — через textContent.
+function buildRankItem(index, label, value) {
+    const li = document.createElement('li');
+    li.appendChild(createEl('span', { className: 'rank-index', text: '#' + (index + 1) }));
+    li.appendChild(createEl('span', { text: label, style: 'flex: 1; padding-left: 10px;' }));
+    li.appendChild(createEl('span', { className: 'rank-value', text: value }));
+    return li;
 }
 
 function renderLeaderboards() {
     // Render top users
     const usersList = document.getElementById('topUsersList');
+    usersList.textContent = '';
+    const downloadsWord = getText(lang, 'downloads_count') || 'DL';
     if (topUsersStr) {
         const users = topUsersStr.split(',');
         users.forEach((u, i) => {
             const parts = u.split(':');
             if (parts.length === 3) {
-                const li = document.createElement('li');
-                li.style.cursor = 'pointer';
-                li.onclick = () => openProfileModal(parts[0]);
-                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[1]}</span><span class="rank-value">${parts[2]} ${getText(lang, 'downloads_count') || 'DL'}</span>`;
+                const li = buildRankItem(i, parts[1], parts[2] + ' ' + downloadsWord);
+                // ID із параметра URL перевіряємо, перш ніж підставити його в запит.
+                if (/^\d+$/.test(parts[0])) {
+                    li.style.cursor = 'pointer';
+                    li.addEventListener('click', () => openProfileModal(parts[0]));
+                }
                 usersList.appendChild(li);
             } else if (parts.length === 2) {
-                const li = document.createElement('li');
-                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[0]}</span><span class="rank-value">${parts[1]} ${getText(lang, 'downloads_count') || 'DL'}</span>`;
-                usersList.appendChild(li);
+                usersList.appendChild(buildRankItem(i, parts[0], parts[1] + ' ' + downloadsWord));
             }
         });
     } else {
-        usersList.innerHTML = '<li>-</li>';
+        usersList.appendChild(createEl('li', { text: '-' }));
     }
-    
+
     // Render top sites
     const sitesList = document.getElementById('topSitesList');
+    sitesList.textContent = '';
     if (topSitesStr) {
         const sites = topSitesStr.split(',');
         sites.forEach((s, i) => {
             const parts = s.split(':');
             if (parts.length === 2) {
-                const li = document.createElement('li');
-                li.innerHTML = `<span class="rank-index">#${i+1}</span><span style="flex: 1; padding-left: 10px;">${parts[0]}</span><span class="rank-value">${parts[1]}</span>`;
-                sitesList.appendChild(li);
+                sitesList.appendChild(buildRankItem(i, parts[0], parts[1]));
             }
         });
     } else {
-        sitesList.innerHTML = '<li>-</li>';
+        sitesList.appendChild(createEl('li', { text: '-' }));
     }
 }
 
@@ -661,7 +771,7 @@ function buyVip() {
                 tg.openTelegramLink(`https://t.me/${botUsername}?start=buy_vip`);
                 setTimeout(() => tg.close(), 500);
             } else {
-                tg.showAlert("Bot username not configured!");
+                tg.showAlert(getText(lang, 'bot_not_configured'));
             }
         }
     });
@@ -725,7 +835,7 @@ function submitSmartTrim() {
     const endStr = document.getElementById('clipper_end').value.trim();
     
     if (!url || !startStr || !endStr) {
-        tg.showAlert("Будь ласка, заповніть всі поля.");
+        tg.showAlert(getText(lang, 'fill_all_fields'));
         return;
     }
     
@@ -763,7 +873,7 @@ function submitAudioEditor() {
     const album = document.getElementById('editor_album').value.trim();
     
     if (!url) {
-        tg.showAlert("Будь ласка, введіть посилання на трек.");
+        tg.showAlert(getText(lang, 'enter_track_url'));
         return;
     }
     
@@ -802,29 +912,31 @@ function setupSearch() {
 
         debounceTimer = setTimeout(async () => {
             try {
-                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}&initData=${encodeURIComponent(tg.initData || '')}`, {
-                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                const res = await fetch(`${apiUrl}/search_users?q=${encodeURIComponent(query)}`, {
+                    headers: apiHeaders()
                 });
                 if (!res.ok) throw new Error("Search failed");
                 const data = await res.json();
-                
-                resultsList.innerHTML = '';
+
+                resultsList.textContent = '';
                 if (data.results && data.results.length > 0) {
                     data.results.forEach(user => {
                         const li = document.createElement('li');
                         li.style.cursor = 'pointer';
-                        li.onclick = () => openProfileModal(user.telegram_id);
-                        li.innerHTML = `<span style="flex: 1;">${user.full_name} (@${user.username || 'user'})</span><span class="rank-value">${user.tier}</span>`;
+                        li.addEventListener('click', () => openProfileModal(user.telegram_id));
+                        const nameLine = (user.full_name || 'User') + ' (@' + (user.username || 'user') + ')';
+                        li.appendChild(createEl('span', { text: nameLine, style: 'flex: 1;' }));
+                        li.appendChild(createEl('span', { className: 'rank-value', text: getText(lang, 'tier_' + user.tier) || user.tier }));
                         resultsList.appendChild(li);
                     });
                     resultsList.style.display = 'block';
                 } else {
-                    resultsList.innerHTML = '<li style="text-align:center; opacity: 0.7;">Не знайдено</li>';
+                    showListMessage(resultsList, getText(lang, 'search_not_found'), 'text-align:center; opacity: 0.7;');
                     resultsList.style.display = 'block';
                 }
             } catch (err) {
                 console.error(err);
-                resultsList.innerHTML = '<li style="text-align:center; opacity: 0.7; color: red;">Помилка завантаження</li>';
+                showListMessage(resultsList, getText(lang, 'search_error'), 'text-align:center; opacity: 0.7; color: red;');
                 resultsList.style.display = 'block';
             }
         }, 500);
@@ -835,16 +947,12 @@ async function openProfileModal(userId) {
     document.body.style.overflow = 'hidden';
     triggerHaptic('medium');
     try {
-        const res = await fetch(`${apiUrl}/get_profile?id=${userId}&initData=${encodeURIComponent(tg.initData || '')}`, {
-            headers: { 'ngrok-skip-browser-warning': 'true' }
+        const res = await fetch(`${apiUrl}/get_profile?id=${encodeURIComponent(userId)}`, {
+            headers: apiHeaders()
         });
         if (!res.ok) {
-            let errorMsg = "Профіль приховано або не знайдено";
-            try {
-                const data = await res.json();
-                if (data.error) errorMsg = data.error;
-            } catch (e) {}
-            tg.showAlert(errorMsg);
+            tg.showAlert(getText(lang, res.status === 404 ? 'profile_hidden' : 'profile_load_error'));
+            document.body.style.overflow = '';
             return;
         }
         
@@ -867,7 +975,8 @@ async function openProfileModal(userId) {
         document.getElementById('publicProfileModal').style.display = 'flex';
     } catch (err) {
         console.error(err);
-        tg.showAlert("Помилка завантаження профілю.");
+        tg.showAlert(getText(lang, 'profile_load_error'));
+        document.body.style.overflow = '';
     }
 }
 
@@ -946,7 +1055,8 @@ function initCustomSelects() {
         if (!selectedOption && select.options.length > 0) {
             selectedOption = select.options[0];
         }
-        trigger.innerHTML = `<span>${selectedOption ? selectedOption.text : ''}</span><div class="arrow"></div>`;
+        trigger.appendChild(createEl('span', { text: selectedOption ? selectedOption.text : '' }));
+        trigger.appendChild(createEl('div', { className: 'arrow' }));
         wrapper.appendChild(trigger);
         
         // Create options container

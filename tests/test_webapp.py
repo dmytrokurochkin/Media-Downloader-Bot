@@ -105,3 +105,38 @@ async def test_generate_webapp_url_vip_gives_nonzero_timestamp(db):
     url = await generate_webapp_url(user, used_downloads=0, bot_username="TestBot")
     params = _params(url)
     assert int(params["vu"]) > 0
+
+
+async def test_generate_webapp_url_cleans_and_truncates_leaderboard_names(db):
+    from core.webapp import LEADERBOARD_NAME_LIMIT
+
+    evil = "<img src=x onerror=alert(1)>,:\nVery Long Name That Keeps Going On And On"
+    await db.get_or_create_user(111, "alice", evil, "en")
+    await db.add_download_record(111, "https://youtube.com/x", "youtube.com", "t", 10, True)
+
+    user = await db.get_or_create_user(111, "alice", evil, "en")
+    url = await generate_webapp_url(user, used_downloads=1, bot_username="TestBot")
+    entry = _params(url)["tu"]
+    user_id, name, count = entry.split(":")
+
+    assert user_id == "111" and count == "1"
+    # Роздільники формату й переноси прибрано, довжину обрізано.
+    assert "," not in name and "\n" not in name
+    assert len(name) <= LEADERBOARD_NAME_LIMIT
+
+
+async def test_generate_webapp_url_uses_configured_base_url(db, monkeypatch):
+    from core import webapp as webapp_module
+
+    monkeypatch.setattr(webapp_module, "WEBAPP_URL", "https://fork.example/webapp/index.html")
+    user = await db.get_or_create_user(111, "alice", "Alice", "en")
+    url = await generate_webapp_url(user, used_downloads=0, bot_username="TestBot")
+    assert url.startswith("https://fork.example/webapp/index.html?")
+
+
+def test_clean_display_text_falls_back_for_empty_values():
+    from core.webapp import clean_display_text
+
+    assert clean_display_text(None, 10) == "User"
+    assert clean_display_text("\u200b\n", 10, "site") == "site"
+    assert clean_display_text("  a   b  ", 10) == "a b"

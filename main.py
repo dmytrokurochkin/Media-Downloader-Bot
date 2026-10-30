@@ -44,11 +44,11 @@ async def main():
         allowed.append("guest_message")
         
     # Запуск aiohttp сервера
-    from core.api import create_api_app
+    from core.api import create_api_app, PathOnlyAccessLogger
     from core.config import API_HOST, API_PORT
     from aiohttp import web
     app = create_api_app()
-    runner = web.AppRunner(app)
+    runner = web.AppRunner(app, access_log_class=PathOnlyAccessLogger)
     await runner.setup()
     site = web.TCPSite(runner, API_HOST, API_PORT, reuse_address=True)
     await site.start()

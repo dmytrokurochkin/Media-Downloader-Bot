@@ -404,12 +404,15 @@ async def award_badge(telegram_id: int, badge_code: str) -> bool:
 async def search_users_query(query_string: str) -> List[dict]:
     """Searches public users by name, username, or ID."""
     global _db_connection
-    search_term = f"%{query_string}%"
+    # % і _ у запиті — це шаблони LIKE: без екранування пошук «%» віддавав би
+    # випадкових користувачів, а «_» — будь-який символ.
+    escaped = query_string.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    search_term = f"%{escaped}%"
     async with _db_connection.execute('''
         SELECT telegram_id, username, full_name, tier, total_bytes_downloaded 
         FROM users 
         WHERE is_anonymous = 0 
-        AND (full_name LIKE ? OR username LIKE ? OR CAST(telegram_id AS TEXT) = ?)
+        AND (full_name LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\' OR CAST(telegram_id AS TEXT) = ?)
         LIMIT 20
     ''', (search_term, search_term, query_string)) as cursor:
         rows = await cursor.fetchall()

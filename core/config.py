@@ -24,6 +24,10 @@ if ERROR_LOG_CHANNEL_ID:
 
 BOT_USERNAME = os.getenv("BOT_USERNAME", "MediaDownloaderForGroups_bot").replace('@', '')
 
+# Адреса Mini App (статичні файли з webapp/, напр. на GitHub Pages). Форк має вказати
+# власну: інакше його користувачі відкривали б фронтенд з чужого репозиторію.
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://dmytrokurochkin.github.io/Media-Downloader-Bot/webapp/index.html")
+
 # Project root directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
