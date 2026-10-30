@@ -6,14 +6,16 @@ from typing import Optional
 
 from aiogram import Router, F
 from aiogram.exceptions import TelegramAPIError, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.types import Message
-from aiogram.filters import Command
+from aiogram.types import Message, LinkPreviewOptions
+from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from core.config import ADMIN_IDS
 from core.loader import bot
 from database import get_or_create_user, get_user, get_all_users, grant_vip, revoke_vip, get_users_stats_by_tier, ban_user_bot, ban_user_support, unban_user, get_vip_users
+from database import record_cookie_import, clear_cookie_status, get_cookie_status
+from core import cookies, cookie_monitor
 from locales import get_text
 from keyboards.reply import get_admin_keyboard, get_admin_cancel_keyboard, get_main_keyboard
 from core.utils import parse_db_date, schedule_delete, spawn, text_matches
@@ -109,6 +111,112 @@ async def cancel_admin_action(message: Message, state: FSMContext):
     await state.clear()
     msg = await message.reply(get_text(user['language_code'], 'admin_cancel_msg'), reply_markup=get_admin_keyboard(user['language_code']))
     schedule_delete(bot, msg.chat.id, msg.message_id, 60)
+
+# --- Cookies ---
+# Хендлери кук стоять раніше за хендлери станів: файл із підписом /cookies не повинен
+# потрапити, скажімо, у текст реклами, якщо адмін забув вийти з попереднього кроку.
+
+def _format_date(value) -> str:
+    if value is None:
+        return "?"
+    if isinstance(value, str):
+        value = parse_db_date(value)
+        if value is None:
+            return "?"
+    return value.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def format_cookie_line(lang: str, summary, icon: str) -> str:
+    expires = ""
+    if summary.auth_expires is not None:
+        expires = get_text(lang, 'cookies_until', date=summary.auth_expires.strftime("%Y-%m-%d"))
+    return get_text(
+        lang, 'cookies_line', icon=icon, service=html.escape(cookies.service_title(summary.service)),
+        count=summary.count, auth=get_text(lang, 'cookies_yes' if summary.authenticated else 'cookies_no'),
+        expires=expires,
+    )
+
+
+def format_cookie_status(lang: str, summaries: dict, db_status: dict) -> str:
+    lines = [get_text(lang, 'cookies_status_title'), ""]
+    for service, summary in summaries.items():
+        if not summary.count:
+            lines.append(get_text(lang, 'cookies_line_missing', service=html.escape(cookies.service_title(service))))
+            continue
+        row = db_status.get(service, {})
+        has_error = bool(row.get('last_error')) and (row.get('last_error_at') or '') >= (row.get('last_ok_at') or '')
+        icon = "⚠️" if has_error or not summary.authenticated else "✅"
+        lines.append(format_cookie_line(lang, summary, icon))
+        if row.get('last_ok_at'):
+            lines.append(get_text(lang, 'cookies_line_ok', when=_format_date(row['last_ok_at'])))
+        if has_error:
+            lines.append(get_text(lang, 'cookies_line_error', when=_format_date(row['last_error_at']),
+                                  error=html.escape(row['last_error'][:200])))
+    return "\n".join(lines)
+
+
+@admin_router.message(Command("cookies"), F.document)
+async def cookies_upload(message: Message, state: FSMContext):
+    """Імпорт кук файлом: так їх можна оновити з телефона, без SSH на сервер."""
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+    if message.chat.type != "private":
+        await message.reply(get_text(lang, 'cookies_private_only'))
+        return
+    if (message.document.file_size or 0) > cookies.MAX_UPLOAD_BYTES:
+        await message.reply(get_text(lang, 'cookies_bad_format'))
+        return
+
+    data = (await bot.download(message.document.file_id)).read()
+    try:
+        summaries = cookies.import_cookies(data.decode("utf-8"))
+    except UnicodeDecodeError:
+        await message.reply(get_text(lang, 'cookies_bad_format'))
+        return
+    except cookies.CookieFileError as e:
+        await message.reply(get_text(lang, e.key, services=", ".join(cookies.SERVICES)))
+        return
+
+    await record_cookie_import(list(summaries))
+    for service in summaries:
+        cookie_monitor.reset_alerts(service)
+    # Файл із куками — це доступ до акаунтів: в історії чату йому не місце.
+    try:
+        await message.delete()
+    except TelegramAPIError as e:
+        logger.info("Could not delete cookies message: %s", e)
+    lines = "\n".join(format_cookie_line(lang, summary, "•") for summary in summaries.values())
+    await message.answer(get_text(lang, 'cookies_saved', services=lines))
+
+
+@admin_router.message(Command("cookies"))
+async def cookies_command(message: Message, command: CommandObject, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+
+    args = (command.args or "").lower().split()
+    if args[:1] == ["clear"]:
+        service = args[1] if len(args) > 1 else ""
+        if service not in cookies.SERVICES:
+            await message.reply(get_text(lang, 'cookies_unknown_service', services=", ".join(cookies.SERVICES)))
+            return
+        title = html.escape(cookies.service_title(service))
+        if cookies.clear_service(service):
+            await clear_cookie_status(service)
+            await message.reply(get_text(lang, 'cookies_cleared', service=title))
+        else:
+            await message.reply(get_text(lang, 'cookies_nothing_to_clear', service=title))
+        return
+
+    text = format_cookie_status(lang, cookies.status(), await get_cookie_status())
+    await message.reply(text + "\n\n" + get_text(lang, 'cookies_help'),
+                        link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 # --- Broadcast ---
 @admin_router.message(text_matches('admin_btn_broadcast'))

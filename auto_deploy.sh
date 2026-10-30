@@ -168,9 +168,9 @@ echo -e "${GREEN}Залежності Python встановлено!${NC}"
 # 5. Інформація про cookies
 echo -e "\n${BLUE}[5/8] Налаштування cookies для Instagram/Facebook/YouTube 18+...${NC}"
 if [ ! -f "cookies.txt" ]; then
-    echo -e "Для завантаження приватного контенту, Instagram, Facebook та YouTube 18+ потрібен файл cookies.txt."
-    echo -e "Будь ласка, експортуйте cookies з вашого браузера (наприклад, через розширення Get cookies.txt)"
-    echo -e "та збережіть їх у файл $(pwd)/cookies.txt після завершення встановлення."
+    echo -e "Для Instagram, Facebook, TikTok і YouTube 18+ потрібні куки окремого акаунта."
+    echo -e "Після запуску надішліть боту файл cookies.txt з підписом /cookies (лише адмін, в особистому чаті)"
+    echo -e "або покладіть його в $(pwd)/cookies.txt. Як експортувати, щоб куки не ламались, — команда /cookies."
 else
     echo -e "${GREEN}Файл cookies.txt знайдено!${NC}"
 fi

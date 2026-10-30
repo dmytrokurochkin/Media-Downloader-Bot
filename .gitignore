@@ -1,4 +1,5 @@
 cookies.txt
+.cookies-*.tmp
 tqueue.binlog
 webhooks_db.binlog
 td.binlog

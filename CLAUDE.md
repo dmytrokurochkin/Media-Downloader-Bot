@@ -48,6 +48,8 @@ core/
   config.py              # .env → константи, тарифи (TIER_LIMITS, VIP_TARIFFS, THEME_PRICES)
   loader.py              # bot (локальний Bot API, parse_mode=HTML) і dp
   net_guard.py           # захист від SSRF: ensure_public_url, safe_get, safe_download
+  cookies.py             # cookies.txt: імпорт по сервісах, копія на кожне завантаження, класифікація збоїв доступу
+  cookie_monitor.py      # стан кук у БД і сповіщення адмінам, коли доступ зламався
   utils.py               # spawn, schedule_delete, extract_url, host_matches, run_command, …
   error_handler.py       # єдина обробка помилок завантаження + звіт у канал помилок
   webapp.py              # URL Mini App з усіма даними в query-параметрах, merge_top_domains
@@ -94,7 +96,8 @@ auto_deploy.sh           # розгортання на Debian/Ubuntu: збірк
 | `PUBLIC_API_URL` | ні | публічна HTTPS-адреса API для Mini App (ngrok) |
 | `NGROK_AUTHTOKEN`, `NGROK_DOMAIN` | ні | тунель для `PUBLIC_API_URL` (налаштовує auto_deploy.sh) |
 | `STORAGE_CHAT_ID` | ні | канал-сховище для `file_id` у гостьовому режимі |
-| `YTDLP_COOKIES_FROM_BROWSER` | ні | cookies з браузера для локальної розробки (на сервері — `cookies.txt`) |
+| `YTDLP_COOKIES_FROM_BROWSER` | ні | cookies з браузера для локальної розробки (на сервері — `/cookies`) |
+| `DOWNLOAD_PROXY` | ні | проксі для yt-dlp/gallery-dl/spotdl, якщо сервіси блокують IP сервера |
 | `FFMPEG_PATH` | ні | шлях до ffmpeg, якщо його немає в PATH (Windows) |
 
 ---
@@ -107,6 +110,7 @@ auto_deploy.sh           # розгортання на Debian/Ubuntu: збірк
 | `downloader.py` | вибір бекенда за хостом і саме завантаження | `download_media`, `download_media_sync` (yt-dlp у потоці), `enforce_size_limit`, `collect_media_files` |
 | `core/net_guard.py` | будь-який HTTP-запит до адреси від користувача | `ensure_public_url`, `safe_get`, `safe_download`, `PublicOnlyResolver` |
 | `core/error_handler.py` | що показати користувачу і чи слати звіт | `classify_media_error`, `handle_media_error` |
+| `core/cookies.py` + `core/cookie_monitor.py` | куки сервісів і реакція на їхню «смерть» | `import_cookies`, `cookiefile_for`, `classify_auth_problem`, `report_problem` |
 | `handlers/payment.py` + `database.py` | гроші | `validate_purchase`, `apply_vip_purchase`, `apply_theme_purchase`, `refund_payment` |
 | `handlers/user.py` | меню, профіль, підтримка, дані з Mini App | `web_app_data_handler`, `process_support_message`, `support_ban_text` |
 | `handlers/admin.py` | адмін-панель | `run_broadcast`, `parse_id_and_days`, `NOT_ADMIN_BUTTON` |
@@ -141,6 +145,10 @@ Outer-middleware: спершу `ThrottlingMiddleware` (1 апдейт/с на к
 3. `download_media` спершу викликає `ensure_public_url`, потім бекенд за хостом
    (`host_matches`, не підрядок): spotdl, gallery-dl, Threads, GitHub (HEAD.zip) або yt-dlp.
    Розмір перевіряється по реальних файлах (`enforce_size_limit`), є таймаути й скасування.
+   yt-dlp і gallery-dl отримують **копію** кук лише потрібного сервісу (`cookiefile_for`), а
+   спроби йдуть: куки бота → куки з браузера (локально) → без кук. Збій доступу (18+, вхід,
+   «не бот», мертві куки) — це `AuthRequiredError`: користувач бачить пояснення, адмін —
+   сповіщення з порадою (`cookie_monitor`), навіть якщо запасна спроба без кук вдалась.
 4. Обробка: теги (`audio_tags`), вотермарка (`media_processor`).
 5. `dispatch_telegram_media`: один файл — `send_media_file`, кілька — альбоми по 10; у гостьовому
    режимі — `_deliver_guest` (файл у канал-сховище або в ЛС → `answer_guest_query` з `file_id`).
@@ -212,6 +220,26 @@ spotdl 4.6 пінить `yt-dlp<2027`; апдейтер свідомо став�
 **Дати в БД у двох форматах:** `YYYY-MM-DD HH:MM:SS` (`CURRENT_TIMESTAMP`) і ISO з `T` та зсувом
 (Python). У SQL порівнюй через `datetime(...)`, у Python — `parse_db_date` (повертає `None` на
 сміття, перевіряй). Денна квота скидається о 00:00 **UTC**.
+
+**yt-dlp і gallery-dl перезаписують файл кук після кожного запуску.** yt-dlp — неатомарно
+(truncate + write), gallery-dl — своєю копією сесії (`cookies-update`). Спільний `cookies.txt`
+при паралельних завантаженнях псувався: авторизаційні куки зникали або свіжі затирались старими.
+Тому інструментам — лише копія (`core/cookies.py::cookiefile_for`) у прихованій `.cookies/`
+теки сесії, а `cookies.txt` змінює тільки бот при імпорті (`/cookies`). Ніколи не передавай
+`cookies.txt` інструменту напряму.
+
+**Копія кук лежить у теці сесії — поруч із результатами завантаження.** Тому
+`collect_media_files` пропускає приховані шляхи й `.txt`: інакше при невдалому завантаженні
+бот «повернув» би файл кук як результат і надіслав його користувачу. Тест:
+`test_cookie_copy_is_never_returned_as_downloaded_media`.
+
+**`#HttpOnly_` на початку рядка cookies.txt — не коментар.** Так розширення позначають
+HttpOnly-куки, і серед них авторизаційні (YouTube `__Secure-3PSID`). Парсер, що пропускає всі
+рядки з `#`, «розлогінює» акаунт.
+
+**Куки YouTube «прокручуються» у відкритій вкладці браузера.** Експорт із браузера, яким далі
+користуються, перестає працювати за години. Правильний спосіб (приватне вікно →
+youtube.com/robots.txt → експорт → закрити вікно назавжди) — у тексті `/cookies`.
 
 **Фонові задачі — через `core.utils.spawn`, не `asyncio.create_task`:** event loop тримає лише
 слабке посилання, і задачу без власника може прибрати збирач сміття.
