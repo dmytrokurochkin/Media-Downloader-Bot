@@ -5,18 +5,26 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Щотижневий прогін ловить нові вразливості в залежностях без нових комітів.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 — мінімум (spotdl, yt-dlp); верхня межа — те, що підтримує aiogram.
+        python-version: ["3.11", "3.12", "3.13"]
     env:
       # core/loader.py constructs a real aiogram Bot(token=BOT_TOKEN, ...) at import
-      # time, and aiogram validates the token's shape (digits:alphanumeric) even
-      # without hitting the network. Every other setting in core/config.py has a
-      # safe default, but BOT_TOKEN doesn't, so it must be set here or test
-      # collection fails for any module that imports a handler. This is a
-      # syntactically-valid placeholder, not a real token - never use the real
-      # BOT_TOKEN as a CI secret.
+      # time. tests/conftest.py already sets this placeholder; it is repeated here so
+      # collection never depends on a real token. Never use the real BOT_TOKEN as a
+      # CI secret.
       BOT_TOKEN: "123456:FAKE-TOKEN-FOR-CI-0000000000"
 
     steps:
@@ -26,7 +34,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install system dependencies (weasyprint/PDF export)
         run: |
@@ -38,5 +50,33 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Lint
+        run: ruff check .
+
       - name: Run tests
         run: pytest -q
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Audit dependencies for known vulnerabilities
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.txt --progress-spinner off
+
+  deploy-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck auto_deploy.sh
+        run: shellcheck -S warning auto_deploy.sh

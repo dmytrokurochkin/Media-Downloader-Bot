@@ -1,7 +1,13 @@
+import os
 import sys
 from pathlib import Path
 
 import pytest_asyncio
+
+# core/loader.py створює Bot(token=...) уже при імпорті хендлерів. Заглушка ставиться ДО
+# load_dotenv() (той не перезаписує наявні змінні), тож тести ніколи не беруть справжній
+# токен з .env і не потребують його в CI.
+os.environ.setdefault("BOT_TOKEN", "123456:FAKE-TOKEN-FOR-CI-0000000000")
 
 # Make the project root importable when pytest is run from elsewhere.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

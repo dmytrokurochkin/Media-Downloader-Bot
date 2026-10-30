@@ -24,7 +24,11 @@ file as described in the [README](README.md#-local-deployment).
 
 ```bash
 pytest
+ruff check .
 ```
+
+`tests/conftest.py` sets a placeholder `BOT_TOKEN`, so the suite never needs (or
+uses) a real token from `.env`.
 
 The test suite is also run automatically on every push and pull request to
 `main` via the [Tests workflow](.github/workflows/tests.yml).
@@ -34,10 +38,11 @@ The test suite is also run automatically on every push and pull request to
 1. Fork the repository and create a branch off `main` for your change.
 2. Keep the change focused - unrelated fixes or refactors should be their
    own PR.
-3. Make sure `pytest` passes locally before opening the PR.
+3. Make sure `pytest` and `ruff check .` pass locally before opening the PR.
 4. Describe what the change does and why in the PR description.
 
 ## Code style
 
-There's no enforced linter/formatter yet - just try to match the style of
-the surrounding code.
+`ruff check .` must pass (see `ruff.toml`: it catches real bugs, not style).
+There is no enforced formatter - just match the style of the surrounding code.
+User-facing text goes into `locales.py` in all three languages.
