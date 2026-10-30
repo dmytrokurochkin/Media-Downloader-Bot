@@ -443,3 +443,38 @@ async def test_leaderboard_cache_is_invalidated_by_anonymity_toggle(db):
     # …але анонімність застосовується одразу: користувач зникає з топу.
     await db.update_user_settings(111, "en", "best", True, "standard", "bottom_right")
     assert [u["telegram_id"] for u in await db.get_top_users(10)] == [222]
+
+
+async def test_purge_keeps_leaderboards_limits_and_profiles(db):
+    # Очищення стирає лише url і page_title: топи, ліміти, профілі й бейджі рахуються
+    # за рядками, доменом і датою, тож до і після очищення мають бути ідентичні.
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    await db.get_or_create_user(222, "bob", "Bob", "en")
+    for uid, url, domain, age in [
+        (111, "https://youtube.com/a", "youtube.com", "-40 days"),
+        (111, "https://m.youtube.com/b", "m.youtube.com", "-35 days"),
+        (222, "https://www.tiktok.com/c", "www.tiktok.com", "-60 days"),
+        (222, "https://www.tiktok.com/d", "www.tiktok.com", "-1 days"),
+    ]:
+        await db._db_connection.execute(
+            "INSERT INTO downloads (telegram_id, url, domain, page_title, file_size, success, timestamp) "
+            "VALUES (?, ?, ?, 'title', 1, 1, datetime('now', ?))",
+            (uid, url, domain, age),
+        )
+    await db._db_connection.commit()
+    await db.add_download_record(111, "https://youtube.com/today", "youtube.com", "title", 1, True)
+
+    async def snapshot():
+        db._leaderboard_cache.clear()
+        return (
+            await db.get_top_users(10),
+            await db.get_top_domains(),
+            await db.get_user_stats(111),
+            await db.get_user_stats(222),
+            await db.get_daily_download_count(111),
+        )
+
+    before = await snapshot()
+    assert await db.purge_old_download_urls(30) == 3
+    assert await snapshot() == before
+    assert [u["count"] for u in before[0]] == [3, 2]
