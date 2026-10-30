@@ -49,7 +49,8 @@ def test_pip_upgrade_installs_latest_not_a_pinned_floor(monkeypatch):
 
     monkeypatch.setattr(yt_dlp_updater.subprocess, "run", fake_run)
     assert yt_dlp_updater._run_pip_upgrade() is True
-    assert seen["cmd"][1:] == ["-m", "pip", "install", "--upgrade", "yt-dlp"]
+    # [default] keeps yt-dlp-ejs (the YouTube challenge solver) in step with yt-dlp.
+    assert seen["cmd"][1:] == ["-m", "pip", "install", "--upgrade", "yt-dlp[default]"]
     # No version specifier anywhere: we always track the newest release.
     assert not any("==" in part or ">=" in part for part in seen["cmd"])
     assert seen["timeout"] == yt_dlp_updater.PIP_TIMEOUT

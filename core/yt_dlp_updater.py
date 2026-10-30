@@ -34,6 +34,10 @@ import sys
 from typing import NamedTuple
 
 PACKAGE = "yt-dlp"
+# The [default] extra pulls yt-dlp-ejs (YouTube's JS challenge solver, run by the
+# Deno runtime auto_deploy.sh installs). Upgrading bare "yt-dlp" would leave a
+# stale solver behind that no longer matches the new release.
+PIP_SPEC = "yt-dlp[default]"
 BOT_SERVICE = "tg-media-bot.service"
 
 PIP_TIMEOUT = 300
@@ -69,7 +73,7 @@ def _run_pip_upgrade(timeout: int = PIP_TIMEOUT) -> bool:
     Returns True on success.  On failure the reason is printed to stderr --
     a silent False here is exactly the bit-rot this module exists to stop.
     """
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", PACKAGE]
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", PIP_SPEC]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except Exception as exc:  # noqa: BLE001 - keep the working version on any failure

@@ -3,7 +3,10 @@ aiogram==3.29.1
 # left unpinned: core.yt_dlp_updater installs the latest release at deploy
 # time and weekly thereafter.  A pinned floor here would go stale faster than
 # anyone remembers to bump it.
-yt-dlp
+# [default]: тягне yt-dlp-ejs — розв'язувач JS-челенджів YouTube. Без нього (і без
+# JS-рантайму Deno, який ставить auto_deploy.sh) YouTube віддає лише частину форматів
+# або нічого.
+yt-dlp[default]
 aiohttp
 aiohttp_cors
 cachetools
