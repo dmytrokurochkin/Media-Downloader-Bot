@@ -56,13 +56,16 @@ async def test_process_audio_tags_handles_list_input(tmp_path, monkeypatch):
     assert names == {"tagged_a.mp3", "b.mp4"}
 
 
-async def test_process_audio_tags_cleans_up_cover_directory(tmp_path, monkeypatch):
-    cover_dir = tmp_path / "cover_session"
-    cover_dir.mkdir()
-    cover_path = cover_dir / "cover.jpg"
+async def test_process_audio_tags_leaves_session_directory_alone(tmp_path, monkeypatch):
+    # Обкладинка тепер лежить у тимчасовій сесії завантаження поряд із треками й
+    # прибирається разом із нею. Видаляти батьківську теку тут — означало б стерти
+    # щойно протеговані файли до відправки.
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    cover_path = session_dir / "cover.jpg"
     cover_path.touch()
 
-    filepath = tmp_path / "song.mp3"
+    filepath = session_dir / "song.mp3"
     filepath.touch()
 
     async def fake_apply(input_path, output_path, title, artist, album, cover_path=None):
@@ -72,6 +75,7 @@ async def test_process_audio_tags_cleans_up_cover_directory(tmp_path, monkeypatc
     monkeypatch.setattr("core.audio_tags.apply_audio_metadata", fake_apply)
 
     state_data = {"edit_tags": True, "title": "T", "artist": "A", "album": "Al", "cover_path": str(cover_path)}
-    await process_audio_tags(filepath, state_data)
+    result = await process_audio_tags(filepath, state_data)
 
-    assert not cover_dir.exists()
+    assert result.exists()
+    assert cover_path.exists()

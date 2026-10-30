@@ -17,11 +17,15 @@ def _no_real_dns(monkeypatch):
 
 # --- download_media routing ---
 
-def _patch_all_backends(monkeypatch, calls):
+def _patch_all_backends(monkeypatch, calls, tmp_path):
+    # Бекенди повертають справжній файл: download_media перевіряє його фактичний розмір.
+    result = tmp_path / "result.mp4"
+    result.write_bytes(b"data")
+
     def make_recorder(name):
         async def recorder(*args, **kwargs):
             calls.append(name)
-            return Path("dummy")
+            return result
         return recorder
 
     monkeypatch.setattr(downloader, "download_with_gallery_dl", make_recorder("gallery_dl"))
@@ -31,7 +35,7 @@ def _patch_all_backends(monkeypatch, calls):
 
     def fake_sync(*args, **kwargs):
         calls.append("yt_dlp")
-        return Path("dummy")
+        return result
 
     monkeypatch.setattr(downloader, "download_media_sync", fake_sync)
 
@@ -53,7 +57,7 @@ def _patch_all_backends(monkeypatch, calls):
 ])
 async def test_download_media_routes_to_correct_backend(monkeypatch, tmp_path, url, expected):
     calls = []
-    _patch_all_backends(monkeypatch, calls)
+    _patch_all_backends(monkeypatch, calls, tmp_path)
 
     await downloader.download_media(url, session_dir=tmp_path)
     assert calls == [expected]
@@ -61,7 +65,7 @@ async def test_download_media_routes_to_correct_backend(monkeypatch, tmp_path, u
 
 async def test_download_media_rejects_unsafe_url_before_any_backend(monkeypatch, tmp_path):
     calls = []
-    _patch_all_backends(monkeypatch, calls)
+    _patch_all_backends(monkeypatch, calls, tmp_path)
 
     async def reject(url):
         raise UnsafeURLError("private network")

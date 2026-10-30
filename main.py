@@ -18,10 +18,13 @@ async def main():
     await init_db()
     
     dp.shutdown.register(close_db_connection)
-    
-    from core.config import MAX_CONCURRENT_DOWNLOADS
-    import handlers.media
-    handlers.media.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+
+    # Залишки сесій, перерваних попереднім рестартом. Безпечно лише тут: жодне
+    # завантаження ще не почалось.
+    from core.utils import cleanup_stale_downloads
+    removed = cleanup_stale_downloads()
+    if removed:
+        logging.info("Removed %d stale download session(s)", removed)
     
     # Підключення роутерів
     dp.include_router(user_router)

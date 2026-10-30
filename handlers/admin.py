@@ -411,11 +411,33 @@ async def btn_add_ad(message: Message, state: FSMContext):
 async def process_add_ad(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id): return
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-    ad_text = message.text
+    lang = user['language_code']
+    ad_text = (message.text or "").strip()
+    if not ad_text:
+        await message.reply(get_text(lang, 'admin_ad_empty'))
+        return
+
+    # Рекламу перевіряємо ДО збереження: вона додається в підпис кожного файлу Free-
+    # користувачів з parse_mode=HTML. Один незакритий тег чи задовгий текст раніше
+    # ламав відправку всім Free-користувачам. Telegram сам розбирає HTML у тестовому
+    # повідомленні, а довжину рахуємо по видимому тексту (в UTF-16, як Telegram).
+    from aiogram.exceptions import TelegramBadRequest
+    from core.config import AD_MAX_LENGTH
+    import html
+    try:
+        preview = await message.answer(ad_text, parse_mode="HTML")
+    except TelegramBadRequest as e:
+        await message.reply(get_text(lang, 'admin_ad_invalid_html', error=html.escape(str(e))), parse_mode="HTML")
+        return  # стан лишається: адмін може одразу надіслати виправлений текст
+    visible_length = len((preview.text or "").encode("utf-16-le")) // 2
+    if visible_length > AD_MAX_LENGTH:
+        await message.reply(get_text(lang, 'admin_ad_too_long', length=visible_length, limit=AD_MAX_LENGTH))
+        return
+
     from database import set_active_ad
     await set_active_ad(ad_text)
     from keyboards.reply import get_admin_ad_keyboard
-    await message.reply(get_text(user['language_code'], 'admin_ad_added', text=ad_text), parse_mode=None, reply_markup=get_admin_ad_keyboard(user['language_code']))
+    await message.reply(get_text(lang, 'admin_ad_added', text=ad_text), parse_mode=None, reply_markup=get_admin_ad_keyboard(lang))
     await state.clear()
 
 @admin_router.message(text_matches('admin_btn_clear_ads'))
@@ -435,17 +457,28 @@ async def btn_test_ad(message: Message):
     if not ad_text:
         await message.reply(get_text(user['language_code'], 'admin_ad_not_found'))
         return
-    
-    caption = "Оригінальний підпис до медіа."
-    ad_block = f"\n\n📢 Спонсор: {ad_text}"
-    max_len = 1024 - len(ad_block)
-    if len(caption) > max_len:
-        caption = caption[:max_len - 3] + "..."
-    final_caption = caption + ad_block
 
-    await message.answer_photo(
-        photo="https://via.placeholder.com/800x600.png?text=Test+Ad", 
-        caption=final_caption, 
-        parse_mode="HTML"
-    )
+    # Той самий шлях, що й для справжніх файлів, — тест показує рівно те, що побачать користувачі.
+    from handlers.media import prepare_caption_with_ad
+    caption = await prepare_caption_with_ad("Оригінальний підпис до медіа.", {"tier": "free", "language_code": user['language_code']})
 
+    # Картинку генеруємо локально: зовнішній сервіс заглушок (via.placeholder.com) може
+    # бути недоступним, і тоді «тест реклами» падав незалежно від самої реклами.
+    import io
+    from PIL import Image, ImageDraw
+    from aiogram.types import BufferedInputFile
+    from aiogram.exceptions import TelegramBadRequest
+    image = Image.new("RGB", (800, 450), (40, 44, 52))
+    ImageDraw.Draw(image).text((340, 215), "Test Ad", fill=(255, 255, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    try:
+        await message.answer_photo(
+            photo=BufferedInputFile(buffer.getvalue(), filename="test_ad.png"),
+            caption=caption,
+            parse_mode="HTML"
+        )
+    except TelegramBadRequest as e:
+        import html
+        await message.reply(get_text(user['language_code'], 'admin_ad_invalid_html', error=html.escape(str(e))), parse_mode="HTML")

@@ -41,8 +41,24 @@ TIER_LIMITS = {
     'max': {'daily': 1000, 'playlist': 100, 'size': 2000 * 1024 * 1024}
 }
 
-MAX_ACTIVE_REQUESTS = 15
 MAX_CONCURRENT_DOWNLOADS = 3
+
+# Локальний Bot API приймає файли до 2000 МБ — більший файл Telegram не прийме за жодного тарифу.
+TELEGRAM_UPLOAD_LIMIT = 2000 * 1024 * 1024
+
+# Видимий текст реклами (після розбору HTML) — щоб разом із підписом вміщатися
+# в ліміт підпису до медіа (1024 символи) з запасом.
+AD_MAX_LENGTH = 300
+
+# Необов'язково: браузер, з якого yt-dlp братиме cookies (firefox, chrome...). Для
+# локальної розробки; на сервері використовується cookies.txt.
+YTDLP_COOKIES_FROM_BROWSER = os.getenv("YTDLP_COOKIES_FROM_BROWSER", "").strip()
+
+# Необов'язково: ID приватного каналу, куди бот вантажить файли для гостьового режиму,
+# щоб отримати file_id. Без нього файл іде в особисті тому, хто покликав бота, —
+# а це не працює для людей, які ще не запускали бота.
+STORAGE_CHAT_ID = os.getenv("STORAGE_CHAT_ID", "").strip()
+STORAGE_CHAT_ID = int(STORAGE_CHAT_ID) if STORAGE_CHAT_ID.lstrip("-").isdigit() else None
 
 # Smart Trim: максимальна тривалість фрагмента для Free (секунди).
 FREE_TRIM_MAX_SECONDS = 30

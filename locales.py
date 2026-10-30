@@ -108,7 +108,21 @@ LOCALES = {
         "trim_free_limit": "⚠️ Безкоштовний тариф дозволяє нарізати фрагменти до {seconds} секунд. Придбайте Pro або зменшіть тривалість.",
         "tags_pro_only": "⚠️ Редагування тегів доступне лише для тарифів Pro та Max.",
         "send_cover_photo": "🖼 Надішліть фотографію для обкладинки треку (як звичайне фото, не файл).",
-        "webapp_error": "⚠️ Помилка: {error}"
+        "webapp_error": "⚠️ Помилка: {error}",
+        "download_timeout": "⏱ <b>Завантаження тривало занадто довго й було зупинене.</b>\nСпробуйте пізніше або надішліть інше посилання.",
+        "send_valid_photo": "⚠️ Будь ласка, надішліть коректне фото.",
+        "trim_ready": "✅ Обрізане відео готове! Завантажую в Telegram...",
+        "trim_caption": "✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot}",
+        "ad_label": "📢 Спонсор:",
+        "guest_start_bot_title": "👋 Спершу запустіть бота",
+        "guest_start_bot": "👋 Щоб отримати файл, спершу відкрийте @{bot} і натисніть «Старт», а потім повторіть запит.",
+        "guest_album_sent_title": "✅ Альбом завантажено!",
+        "guest_album_sent": "✅ Медіа успішно завантажено!\n👉 Перевірте ваші приватні повідомлення з ботом.",
+        "guest_video_title": "Відео",
+        "guest_document_title": "Документ",
+        "admin_ad_empty": "❌ Текст реклами порожній. Надішліть текст.",
+        "admin_ad_invalid_html": "❌ Telegram не зміг розібрати HTML реклами:\n<code>{error}</code>\nВиправте текст і надішліть ще раз.",
+        "admin_ad_too_long": "❌ Реклама задовга: {length} символів (максимум {limit}). Скоротіть текст і надішліть ще раз."
     },
     "en": {
         "start": "👋 <b>Hello! I am your personal fast media downloader!</b>\n\nI can download photos, videos and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and more info!",
@@ -216,7 +230,21 @@ LOCALES = {
         "trim_free_limit": "⚠️ The free tier allows clips of up to {seconds} seconds. Buy Pro or shorten the clip.",
         "tags_pro_only": "⚠️ Tag editing is only available for Pro and Max tiers.",
         "send_cover_photo": "🖼 Send a photo for the track cover (as a photo, not a file).",
-        "webapp_error": "⚠️ Error: {error}"
+        "webapp_error": "⚠️ Error: {error}",
+        "download_timeout": "⏱ <b>The download took too long and was stopped.</b>\nPlease try again later or send another link.",
+        "send_valid_photo": "⚠️ Please send a valid photo.",
+        "trim_ready": "✅ The trimmed video is ready! Uploading to Telegram...",
+        "trim_caption": "✂️ <b>Smart Trim</b>\n\n⬇️ Downloaded via @{bot}",
+        "ad_label": "📢 Sponsor:",
+        "guest_start_bot_title": "👋 Start the bot first",
+        "guest_start_bot": "👋 To receive the file, open @{bot}, press “Start”, and then repeat the request.",
+        "guest_album_sent_title": "✅ Album downloaded!",
+        "guest_album_sent": "✅ Media downloaded successfully!\n👉 Check your private chat with the bot.",
+        "guest_video_title": "Video",
+        "guest_document_title": "Document",
+        "admin_ad_empty": "❌ The ad text is empty. Please send the text.",
+        "admin_ad_invalid_html": "❌ Telegram could not parse the ad HTML:\n<code>{error}</code>\nFix the text and send it again.",
+        "admin_ad_too_long": "❌ The ad is too long: {length} characters (maximum {limit}). Shorten it and send again."
     },
     "pl": {
         "start": "👋 <b>Cześć! Jestem twoim osobistym szybkim downloaderem multimediów!</b>\n\nPotrafię pobierać zdjęcia, filmy i dźwięk z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej, aby uzyskać ustawienia i więcej informacji!",
@@ -325,7 +353,21 @@ LOCALES = {
         "trim_free_limit": "⚠️ Darmowy plan pozwala na wycinanie fragmentów do {seconds} sekund. Kup Pro lub skróć fragment.",
         "tags_pro_only": "⚠️ Edycja tagów jest dostępna tylko dla planów Pro i Max.",
         "send_cover_photo": "🖼 Wyślij zdjęcie na okładkę utworu (jako zdjęcie, nie jako plik).",
-        "webapp_error": "⚠️ Błąd: {error}"
+        "webapp_error": "⚠️ Błąd: {error}",
+        "download_timeout": "⏱ <b>Pobieranie trwało zbyt długo i zostało przerwane.</b>\nSpróbuj później lub wyślij inny link.",
+        "send_valid_photo": "⚠️ Wyślij poprawne zdjęcie.",
+        "trim_ready": "✅ Przycięte wideo jest gotowe! Wysyłam do Telegrama...",
+        "trim_caption": "✂️ <b>Smart Trim</b>\n\n⬇️ Pobrano przez @{bot}",
+        "ad_label": "📢 Sponsor:",
+        "guest_start_bot_title": "👋 Najpierw uruchom bota",
+        "guest_start_bot": "👋 Aby otrzymać plik, otwórz @{bot}, naciśnij „Start”, a potem powtórz prośbę.",
+        "guest_album_sent_title": "✅ Album pobrany!",
+        "guest_album_sent": "✅ Multimedia pobrano pomyślnie!\n👉 Sprawdź prywatny czat z botem.",
+        "guest_video_title": "Wideo",
+        "guest_document_title": "Dokument",
+        "admin_ad_empty": "❌ Tekst reklamy jest pusty. Wyślij tekst.",
+        "admin_ad_invalid_html": "❌ Telegram nie mógł przetworzyć HTML reklamy:\n<code>{error}</code>\nPopraw tekst i wyślij ponownie.",
+        "admin_ad_too_long": "❌ Reklama jest za długa: {length} znaków (maksymalnie {limit}). Skróć tekst i wyślij ponownie."
     }
 }
 
