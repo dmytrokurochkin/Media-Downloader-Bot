@@ -45,13 +45,14 @@ async def main():
         
     # Запуск aiohttp сервера
     from core.api import create_api_app
+    from core.config import API_HOST, API_PORT
     from aiohttp import web
     app = create_api_app()
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, None, 8080, reuse_address=True)
+    site = web.TCPSite(runner, API_HOST, API_PORT, reuse_address=True)
     await site.start()
-    logging.info("API Server started on port 8080 (all interfaces)")
+    logging.info("API Server started on %s:%s", API_HOST, API_PORT)
     
     # Запуск фонової задачі для retention (утримання)
     asyncio.create_task(retention_drip_campaign(bot))

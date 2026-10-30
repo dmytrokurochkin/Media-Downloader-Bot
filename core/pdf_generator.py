@@ -1,64 +1,90 @@
 import asyncio
-import aiohttp
+import html
 from pathlib import Path
 from typing import Tuple
+
 from readability import Document
 from weasyprint import HTML
+from weasyprint.urls import URLFetcher, URLFetcherResponse
+
+from core.net_guard import UnsafeURLError, ensure_public_url, ensure_public_url_sync, safe_get
+
+MAX_HTML_BYTES = 5 * 1024 * 1024
+MAX_RESOURCE_BYTES = 10 * 1024 * 1024
+MAX_RESOURCES = 40
+RESOURCE_TIMEOUT = 10
+RENDER_TIMEOUT = 120
+
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+}
+
+# Рендер weasyprint важкий по CPU/RAM, тож паралельно — не більше двох PDF.
+_render_slots = asyncio.Semaphore(2)
+
 
 async def is_safe_url(url: str) -> bool:
-    import ipaddress
-    from urllib.parse import urlparse
-    
+    """Сумісна обгортка над net_guard.ensure_public_url (лишилась для старого коду й тестів)."""
     try:
-        parsed = urlparse(url)
-        if parsed.scheme not in ('http', 'https'):
-            return False
-        hostname = parsed.hostname
-        if not hostname:
-            return False
-        
-        loop = asyncio.get_running_loop()
-        addr_info = await loop.getaddrinfo(hostname, None)
-        for result in addr_info:
-            ip_str = result[4][0]
-            ip = ipaddress.ip_address(ip_str)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified:
-                return False
+        await ensure_public_url(url)
         return True
-    except Exception:
+    except UnsafeURLError:
         return False
+
+
+class PublicOnlyURLFetcher(URLFetcher):
+    """Fetcher для weasyprint: картинки й стилі статті тягнемо лише з публічних адрес.
+
+    Без нього weasyprint ходить за будь-яким `<img src>` зі сторінки, включно з
+    `file://` і `http://127.0.0.1:8081/...` (локальний Bot API) — це той самий
+    SSRF, що й у net_guard, тільки через вміст статті.
+    """
+
+    def __init__(self):
+        super().__init__(
+            timeout=RESOURCE_TIMEOUT,
+            allowed_protocols={"http", "https", "data"},
+            # Редіректи вимкнено: їх перевірити тут нічим, а для картинок у статті це не критично.
+            allow_redirects=False,
+            # Без стиснення відповідь можна обрізати за розміром, а не розпаковувати «бомбу».
+            http_headers={"Accept-Encoding": "identity"},
+        )
+        self._fetched = 0
+
+    def fetch(self, url, headers=None):
+        if url.startswith("data:"):
+            return super().fetch(url, headers)
+
+        self._fetched += 1
+        if self._fetched > MAX_RESOURCES:
+            raise ValueError("Забагато зовнішніх ресурсів у статті.")
+        ensure_public_url_sync(url)
+
+        response = super().fetch(url, headers)
+        try:
+            data = response.read(MAX_RESOURCE_BYTES + 1)
+        finally:
+            response.close()
+        if len(data) > MAX_RESOURCE_BYTES:
+            raise ValueError("Ресурс статті завеликий.")
+        return URLFetcherResponse(response.url, data, response.headers, response.status)
+
 
 async def generate_article_pdf(url: str, output_path: Path) -> Tuple[Path, str]:
     """
     Завантажує HTML-сторінку, витягує головний контент статті за допомогою readability-lxml
     і генерує PDF-файл за допомогою weasyprint.
     """
-    if not await is_safe_url(url):
-        raise Exception("Недопустима або небезпечна URL-адреса.")
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-    }
-    
-    MAX_SIZE = 5 * 1024 * 1024 # 5 MB
-    html_bytes = bytearray()
-    
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers, timeout=15) as resp:
-            if resp.status != 200:
-                raise Exception(f"Не вдалося завантажити сторінку (статус {resp.status})")
-            
-            async for chunk in resp.content.iter_chunked(8192):
-                html_bytes.extend(chunk)
-                if len(html_bytes) > MAX_SIZE:
-                    raise Exception("Файл занадто великий (ліміт 5 МБ)")
-                    
-            html = html_bytes.decode('utf-8', errors='replace')
+    page = await safe_get(url, max_bytes=MAX_HTML_BYTES, timeout=20, headers=BROWSER_HEADERS)
+    html_text = page.body.decode(page.charset or "utf-8", errors="replace")
 
     # Парсимо статтю
-    doc = Document(html)
-    title = doc.title()
+    doc = Document(html_text)
+    title = doc.title() or "Article"
     content_html = doc.summary() # Основний контент (тільки текст, заголовки, картинки)
+    # Заголовок — це текст зі сторінки, а не HTML: без екранування `<title>` статті
+    # міг би підсунути в наш шаблон власні теги.
+    safe_title = html.escape(title)
 
     # HTML-шаблон для PDF
     full_html = f"""
@@ -66,7 +92,7 @@ async def generate_article_pdf(url: str, output_path: Path) -> Tuple[Path, str]:
     <html lang="uk">
     <head>
         <meta charset="utf-8">
-        <title>{title}</title>
+        <title>{safe_title}</title>
         <style>
             @page {{
                 size: A4;
@@ -123,7 +149,7 @@ async def generate_article_pdf(url: str, output_path: Path) -> Tuple[Path, str]:
         </style>
     </head>
     <body>
-        <h1>{title}</h1>
+        <h1>{safe_title}</h1>
         {content_html}
     </body>
     </html>
@@ -131,9 +157,12 @@ async def generate_article_pdf(url: str, output_path: Path) -> Tuple[Path, str]:
 
     # Weasyprint generation has to be synchronous, so we run it in a thread
     def render_pdf():
-        # HTML object, passing base_url to resolve relative image links correctly
-        HTML(string=full_html, base_url=url).write_pdf(target=str(output_path))
+        # base_url — адреса ПІСЛЯ редіректів, щоб відносні посилання на картинки резолвились правильно
+        HTML(string=full_html, base_url=page.url, url_fetcher=PublicOnlyURLFetcher()).write_pdf(target=str(output_path))
 
-    await asyncio.to_thread(render_pdf)
-    
+    async with _render_slots:
+        # Потік не вбити, але кожен ресурс має власний таймаут і ліміт кількості,
+        # тож рендер у фоні все одно завершиться; користувач отримає помилку вчасно.
+        await asyncio.wait_for(asyncio.to_thread(render_pdf), RENDER_TIMEOUT)
+
     return output_path, title

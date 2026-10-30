@@ -8,6 +8,11 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LOCAL_API_SERVER_URL = os.getenv("LOCAL_API_SERVER_URL", "http://127.0.0.1:8081")
 PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://127.0.0.1:8080/api")
+# Внутрішній API бота (пошук/профілі для Mini App). Слухає лише localhost:
+# назовні його виставляє ngrok/reverse-proxy з TLS. Голий HTTP на 0.0.0.0 Mini App
+# і так не використовував би (сторінка на HTTPS блокує mixed content).
+API_HOST = os.getenv("API_HOST", "127.0.0.1")
+API_PORT = int(os.getenv("API_PORT", "8080"))
 ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
 ERROR_LOG_CHANNEL_ID = os.getenv("ERROR_LOG_CHANNEL_ID", "")

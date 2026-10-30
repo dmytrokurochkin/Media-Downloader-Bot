@@ -14,7 +14,16 @@ async def handle_media_error(e: Exception, bot, status_msg, url: str, user: dict
     """
     if is_guest_mode:
         return  # Тиша при помилках в гостьовому режимі
-        
+
+    from core.net_guard import UnsafeURLError
+    if isinstance(e, UnsafeURLError):
+        # Це не збій, а відмова за політикою (приватна мережа тощо) — у канал помилок не шлемо.
+        try:
+            await bot.edit_message_text(get_text(lang, 'unsafe_url'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+            asyncio.create_task(delete_later(bot, status_msg.chat.id, status_msg.message_id, 30))
+        except Exception: pass
+        return
+
     error_msg = str(e)
     
     if "SIZE_LIMIT_EXCEEDED" in error_msg:

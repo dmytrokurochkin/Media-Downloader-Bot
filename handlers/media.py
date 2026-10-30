@@ -5,9 +5,6 @@ import uuid
 from pathlib import Path
 from core.utils import delete_later, temporary_download_session
 
-import aiohttp
-from bs4 import BeautifulSoup
-
 from aiogram import Router, F, Bot
 from aiogram.types import (
     Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo,
@@ -76,20 +73,6 @@ class ProgressTracker:
                 )
             except Exception:
                 pass
-
-async def get_page_title(url: str) -> str:
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=5) as resp:
-                if resp.status == 200:
-                    html = await resp.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    title = soup.find('title')
-                    if title and title.text:
-                        return title.text.strip()[:100]
-    except Exception:
-        pass
-    return "Unknown"
 
 @media_router.guest_message()
 async def guest_text_handler(message: Message):
@@ -185,8 +168,11 @@ async def process_pdf_url(message: Message, state: FSMContext):
                     safe_title = "Article"
                     
                 from aiogram.types import FSInputFile
+                import html as html_lib
                 fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
-                caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
+                # Назва статті й URL — дані зі сторінки/від користувача: без екранування
+                # `<` або `'` ламали parse_mode=HTML, і готовий PDF не відправлявся.
+                caption = f"📄 <b>{html_lib.escape(title[:900])}</b>\n\n🔗 <a href=\"{html_lib.escape(url, quote=True)}\">Джерело</a>"
                 
                 await bot.send_document(
                     chat_id=message.chat.id,
@@ -201,10 +187,16 @@ async def process_pdf_url(message: Message, state: FSMContext):
             else:
                 raise Exception("PDF файл не згенеровано.")
     except Exception as e:
+        from core.net_guard import UnsafeURLError
+        user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+        if isinstance(e, UnsafeURLError):
+            await status_msg.edit_text(get_text(user['language_code'], 'unsafe_url'))
+            return
+        import html as html_lib
         err_str = str(e)
         if len(err_str) > 500:
             err_str = err_str[:500] + "..."
-        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
+        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{html_lib.escape(err_str)}")
 
 @media_router.message(F.text)
 async def text_handler(message: Message):
@@ -555,8 +547,10 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
     success = False
     file_size = 0
     domain = re.search(r'https?://([^/]+)', url).group(1) if re.search(r'https?://([^/]+)', url) else "unknown"
-    page_title = await get_page_title(url)
-    
+    # Назву беремо з метаданих yt-dlp: окремий запит за <title> був зайвим походом на сайт
+    # (до 5 с затримки) і ще й SSRF-дірою — він бив за будь-яким посиланням без перевірок.
+    download_meta = {}
+
     session_dir = Path(f"downloads/{time.time_ns()}")
     
     try:
@@ -572,7 +566,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                             pass
                         
                 tracker_update = tracker.update if tracker else None
-                filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir)
+                filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir, meta=download_meta)
             
             if not is_guest_mode:
                 try:
@@ -627,6 +621,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             queue_waiters -= 1
         
         # Аналітика
+        page_title = download_meta.get('title', '')
         is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
         if success and is_audio_service and isinstance(filepath, list):
             for p in filepath:

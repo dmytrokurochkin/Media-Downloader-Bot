@@ -102,7 +102,8 @@ LOCALES = {
         "admin_ad_cleared": "✅ Усі рекламні кампанії вимкнено.",
         "admin_ad_not_found": "❌ Немає активної реклами.",
         "user_pdf_prompt": "Надішліть посилання на статтю, яку потрібно зберегти як PDF:",
-        "too_many_requests": "⚠️ Забагато активних запитів зараз. Спробуйте, будь ласка, трохи пізніше."
+        "too_many_requests": "⚠️ Забагато активних запитів зараз. Спробуйте, будь ласка, трохи пізніше.",
+        "unsafe_url": "⛔️ <b>Це посилання не можна відкрити.</b>\nВоно веде у приватну мережу, на нестандартний порт або містить логін/пароль. Надішліть звичайне посилання на сторінку з медіа."
     },
     "en": {
         "start": "👋 <b>Hello! I am your personal fast media downloader!</b>\n\nI can download photos, videos and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and more info!",
@@ -204,7 +205,8 @@ LOCALES = {
         "admin_ad_cleared": "✅ All ad campaigns disabled.",
         "admin_ad_not_found": "❌ No active ad.",
         "user_pdf_prompt": "Send the link to the article you want to save as PDF:",
-        "too_many_requests": "⚠️ Too many active requests right now. Please try again in a moment."
+        "too_many_requests": "⚠️ Too many active requests right now. Please try again in a moment.",
+        "unsafe_url": "⛔️ <b>This link can't be opened.</b>\nIt points to a private network, uses a non-standard port or contains login credentials. Please send a regular link to a media page."
     },
     "pl": {
         "start": "👋 <b>Cześć! Jestem twoim osobistym szybkim downloaderem multimediów!</b>\n\nPotrafię pobierać zdjęcia, filmy i dźwięk z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej, aby uzyskać ustawienia i więcej informacji!",
@@ -307,7 +309,8 @@ LOCALES = {
         "admin_ad_cleared": "✅ Wszystkie kampanie reklamowe wyłączone.",
         "admin_ad_not_found": "❌ Brak aktywnej reklamy.",
         "user_pdf_prompt": "Wyślij link do artykułu, który chcesz zapisać jako PDF:",
-        "too_many_requests": "⚠️ Zbyt wiele aktywnych żądań. Spróbuj ponownie za chwilę."
+        "too_many_requests": "⚠️ Zbyt wiele aktywnych żądań. Spróbuj ponownie za chwilę.",
+        "unsafe_url": "⛔️ <b>Tego linku nie można otworzyć.</b>\nProwadzi do sieci prywatnej, używa niestandardowego portu lub zawiera dane logowania. Wyślij zwykły link do strony z multimediami."
     }
 }
 

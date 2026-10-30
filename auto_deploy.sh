@@ -28,6 +28,10 @@ if [ ! -f .env ]; then
         public_api_url="https://${ngrok_domain}/api"
     fi
 
+    # umask 077 у підоболонці: .env з токенами одразу створюється з правами 600,
+    # без вікна, коли його може прочитати будь-який локальний користувач.
+    (
+    umask 077
     cat > .env <<EOL
 BOT_TOKEN=${bot_token}
 BOT_USERNAME=${bot_username}
@@ -40,6 +44,7 @@ PUBLIC_API_URL=${public_api_url}
 NGROK_AUTHTOKEN=${ngrok_authtoken}
 NGROK_DOMAIN=${ngrok_domain}
 EOL
+    )
     echo -e "${GREEN}Файл .env створено!${NC}"
 else
     echo ".env файл вже існує. Використовую його."
@@ -96,6 +101,9 @@ if [ ! -f "telegram-bot-api/build/telegram-bot-api" ]; then
 else
     echo "Сервер вже скомпільовано, пропускаємо."
 fi
+# Бінарник ставимо в /usr/local/bin: сервіс Bot API працює з ProtectHome=yes і
+# не бачить домашніх тек, тож запускати його з ${WORK_DIR} він не зміг би.
+$SUDO install -m 0755 telegram-bot-api/build/telegram-bot-api /usr/local/bin/telegram-bot-api
 
 # 4. Налаштування Python
 echo -e "\n${BLUE}[4/8] Налаштування Python віртуального середовища...${NC}"
@@ -127,12 +135,32 @@ echo -e "\n${BLUE}[6/8] Створення systemd сервісів для фо�
 
 WORK_DIR=$(pwd)
 CURRENT_USER=$(whoami)
-TG_API_BIN="${WORK_DIR}/telegram-bot-api/build/telegram-bot-api"
+TG_API_BIN="/usr/local/bin/telegram-bot-api"
 
-# Створення робочої папки для API сервера, якщо її немає
-mkdir -p "${WORK_DIR}/tg-api-workdir"
+# Секрети бота не мають читатися іншими користувачами системи, зокрема tgbotapi нижче.
+chmod 600 .env
+for secret in cookies.txt database.db database.db-wal database.db-shm; do
+    [ -f "$secret" ] && chmod 600 "$secret"
+done
+
+# Bot API — окремим системним користувачем без доступу до файлів бота.
+# Чому: у режимі --local він уміє відправити БУДЬ-ЯКИЙ локальний файл (file:/...)
+# на запит з будь-яким бот-токеном. Якщо до нього якось дістанеться чужий запит
+# (SSRF через посилання або відкритий порт), читати він може лише власну теку,
+# а не .env / cookies.txt / database.db.
+if ! id -u tgbotapi >/dev/null 2>&1; then
+    $SUDO useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin tgbotapi
+fi
+# API_ID/API_HASH — через EnvironmentFile, а не аргументами: аргументи видно в `ps` усім.
+$SUDO install -d -o root -g tgbotapi -m 0750 /etc/telegram-bot-api
+printf 'TELEGRAM_API_ID=%s\nTELEGRAM_API_HASH=%s\n' "$api_id" "$api_hash" | $SUDO tee /etc/telegram-bot-api/env >/dev/null
+$SUDO chown root:tgbotapi /etc/telegram-bot-api/env
+$SUDO chmod 0640 /etc/telegram-bot-api/env
 
 # Сервіс сервера Telegram Bot API
+# --http-ip-address=127.0.0.1: за замовчуванням сервер слухає 0.0.0.0, тобто весь інтернет.
+# Дані (сесія бота, файли користувачів) — у /var/lib/telegram-bot-api (StateDirectory);
+# бот читає звідти файли через групу tgbotapi (SupplementaryGroups у юніті бота).
 cat > telegram-bot-api.service <<EOL
 [Unit]
 Description=Local Telegram Bot API Server
@@ -140,10 +168,24 @@ After=network.target
 
 [Service]
 Type=simple
-User=${CURRENT_USER}
-ExecStart=${TG_API_BIN} --local --api-id=${api_id} --api-hash=${api_hash} --dir=${WORK_DIR}/tg-api-workdir
+User=tgbotapi
+Group=tgbotapi
+EnvironmentFile=/etc/telegram-bot-api/env
+StateDirectory=telegram-bot-api
+StateDirectoryMode=0750
+UMask=0027
+ExecStart=${TG_API_BIN} --local --http-ip-address=127.0.0.1 --http-port=8081 --dir=/var/lib/telegram-bot-api
 Restart=always
 RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -159,6 +201,10 @@ Requires=telegram-bot-api.service
 [Service]
 Type=simple
 User=${CURRENT_USER}
+# Читати файли, які Bot API кладе в /var/lib/telegram-bot-api (local-режим віддає шляхи).
+SupplementaryGroups=tgbotapi
+# database.db, cookies та тимчасові файли створюються лише для власника.
+UMask=0077
 WorkingDirectory=${WORK_DIR}
 ExecStartPre=/bin/bash -c 'for i in \$(seq 1 30); do curl -sf http://127.0.0.1:8081 >/dev/null 2>&1 && break || sleep 2; done'
 ExecStart=${WORK_DIR}/venv/bin/python3 main.py
@@ -287,7 +333,10 @@ fi
 echo -e "\n${GREEN}======================================================================${NC}"
 echo -e "${GREEN}ГОТОВО! Ваш бот та локальний сервер успішно встановлені та запущені.${NC}"
 echo -e "======================================================================"
-echo -e "🔗 Локальний Telegram API сервер працює за адресою: http://127.0.0.1:8081"
+echo -e "🔗 Локальний Telegram API сервер працює за адресою: http://127.0.0.1:8081 (лише localhost, користувач tgbotapi)"
+if [ -d "${WORK_DIR}/tg-api-workdir" ]; then
+    echo -e "🧹 Стара тека ${WORK_DIR}/tg-api-workdir більше не використовується (дані тепер у /var/lib/telegram-bot-api) — її можна видалити."
+fi
 echo -e "🔄 Бот підключено до локального сервера (через LOCAL_API_SERVER_URL у .env)."
 echo -e "📦 Тепер ви можете надсилати та приймати файли розміром до 2 ГБ!"
 echo -e ""

@@ -10,10 +10,10 @@ cachetools
 python-dotenv
 gallery-dl
 spotdl
-requests
-beautifulsoup4
 aiosqlite
 mutagen
 Pillow
 readability-lxml
-weasyprint
+# >=68: core/pdf_generator.py наслідує weasyprint.urls.URLFetcher (з'явився у 68.0),
+# щоб картинки статті тягнулись лише з публічних адрес.
+weasyprint>=68

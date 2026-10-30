@@ -1,13 +1,28 @@
 import os
 import re
+import json
 import asyncio
-import aiohttp
+import logging
 import subprocess
 import time
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Optional
+from urllib.parse import urlsplit
 import yt_dlp
 from core.config import TIER_LIMITS
+from core.net_guard import FetchError, ResponseTooLargeError, ensure_public_url, safe_download, safe_get
+
+logger = logging.getLogger(__name__)
+
+
+def host_matches(url: str, *domains: str) -> bool:
+    """True, якщо хост URL — це один із доменів або його піддомен.
+
+    Перевірка підрядком (`'instagram.com' in url`) ловила й `https://evil.com/?x=instagram.com`,
+    тож маршрутизація йде лише за справжнім хостом.
+    """
+    host = (urlsplit(url).hostname or "").lower()
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
 
 async def download_with_spotdl(url: str, session_dir: Path, progress_callback=None, tier: str = 'free') -> List[Path]:
     """
@@ -29,10 +44,12 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
         save_file = session_dir / "tracks.spotdl"
         try:
             save_cmd = [
-                sys.executable, "-m", "spotdl", "save", url, "--save-file", str(save_file)
+                sys.executable, "-m", "spotdl", "save", "--save-file", str(save_file)
             ]
             if ffmpeg_winget.exists():
                 save_cmd.extend(["--ffmpeg", str(ffmpeg_winget)])
+            # `--` перед URL: рядок із Mini App, що починається з `-`, інакше став би опцією spotdl.
+            save_cmd.extend(["--", url])
 
             subprocess.run(save_cmd, check=True, capture_output=True, text=True, env=env, encoding='utf-8', errors='replace')
             
@@ -91,52 +108,34 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
     downloaded_files.sort(key=lambda x: x.stat().st_mtime)
     return downloaded_files
 
-async def download_github(url: str, session_dir: Path, progress_callback=None) -> Path:
+async def download_github(url: str, session_dir: Path, progress_callback=None, max_bytes: int = TIER_LIMITS['free']['size']) -> Path:
     """
     Парсить посилання на GitHub та завантажує .zip архів репозиторію.
-    Спочатку перевіряє гілку main, потім (якщо 404) перевіряє гілку master.
+    `archive/HEAD.zip` GitHub віддає з дефолтної гілки репозиторію, тож працюють і
+    репозиторії з гілкою `dev`/`trunk`, а не лише main/master. Розмір обмежений
+    тарифом: архів стрімиться на диск і обривається, щойно перевищить ліміт.
     """
-    match = re.match(r'https?://github\.com/([^/]+)/([^/\?#]+)', url)
+    match = re.match(r'https?://(?:www\.)?github\.com/([^/]+)/([^/\?#]+)', url)
     if not match:
         raise ValueError("Невірний формат посилання на GitHub.")
-    
+
     user, repo = match.groups()
     repo = repo.removesuffix('.git')
-    
-    main_url = f"https://github.com/{user}/{repo}/archive/refs/heads/main.zip"
-    master_url = f"https://github.com/{user}/{repo}/archive/refs/heads/master.zip"
-    
-    async with aiohttp.ClientSession() as session:
-        # Спочатку пробуємо гілку main
-        async with session.get(main_url) as resp:
-            if resp.status == 200:
-                return await _download_file(resp, session_dir / f"{repo}_main.zip", progress_callback)
-            
-        # Якщо main не знайдено, пробуємо master
-        async with session.get(master_url) as resp:
-            if resp.status == 200:
-                return await _download_file(resp, session_dir / f"{repo}_master.zip", progress_callback)
-                
-    raise Exception("Не вдалося знайти гілку main або master (отримано 404).")
 
-async def _download_file(response, filepath: Path, progress_callback) -> Path:
-    """
-    Внутрішня функція для асинхронного завантаження файлу по шматках з трекінгом прогресу.
-    """
-    total_size = int(response.headers.get('content-length', 0))
-    
-    with open(filepath, 'wb') as f:
-        downloaded = 0
-        async for chunk in response.content.iter_chunked(8192):
-            f.write(chunk)
-            downloaded += len(chunk)
-            if total_size > 0 and progress_callback:
-                percent = downloaded / total_size * 100
-                await progress_callback(percent)
-                
-    return filepath
+    archive_url = f"https://github.com/{user}/{repo}/archive/HEAD.zip"
+    try:
+        return await safe_download(
+            archive_url,
+            session_dir / f"{repo}.zip",
+            max_bytes=max_bytes,
+            progress_callback=progress_callback,
+        )
+    except FetchError as e:
+        if e.status == 404:
+            raise Exception("Репозиторій не знайдено або він приватний.") from e
+        raise
 
-def download_media_sync(url: str, format_spec: str, progress_callback, loop, session_dir: Path, tier: str) -> Path:
+def download_media_sync(url: str, format_spec: str, progress_callback, loop, session_dir: Path, tier: str, meta: Optional[dict] = None) -> Path:
     """
     Синхронна функція для роботи з yt-dlp. Буде запущена в окремому потоці.
     """
@@ -232,8 +231,10 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         current_opts.update(config)
         try:
             with yt_dlp.YoutubeDL(current_opts) as ydl:
-                ydl.extract_info(url, download=True)
-                
+                info = ydl.extract_info(url, download=True)
+                if meta is not None and isinstance(info, dict) and info.get('title'):
+                    meta['title'] = str(info['title'])[:200]
+
                 if size_limit_hit:
                     raise Exception('SIZE_LIMIT_EXCEEDED')
                 
@@ -330,16 +331,18 @@ async def download_with_gallery_dl(url: str, session_dir: Path, progress_callbac
         cmd = [
             sys.executable, "-m", "gallery_dl",
             "--directory", str(session_dir),
-            url
         ]
-        
+
         playlist_limit = TIER_LIMITS[tier]['playlist']
         if playlist_limit < 9999:
             cmd.extend(["--range", f"1-{playlist_limit}"])
-        
+
         if Path('cookies.txt').exists():
             cmd.extend(["--cookies", "cookies.txt"])
-            
+
+        # `--` перед URL: рядок із Mini App, що починається з `-`, інакше став би опцією gallery-dl.
+        cmd.extend(["--", url])
+
         try:
             result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
             print("gallery-dl output:", result.stdout)
@@ -369,126 +372,137 @@ async def download_with_gallery_dl(url: str, session_dir: Path, progress_callbac
     files.sort(key=lambda x: x.stat().st_mtime)
     return files
 
-async def download_threads_native(url: str, session_dir: Path, progress_callback=None) -> List[Path]:
-    import requests
-    import re
-    import aiohttp
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Sec-Fetch-Mode": "navigate",
-    }
-    
-    match = re.search(r'post/([^/?#]+)', url)
+THREADS_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Sec-Fetch-Mode": "navigate",
+}
+THREADS_PAGE_MAX_BYTES = 10 * 1024 * 1024
+THREADS_MAX_ITEMS = 10
+
+
+def _decode_json_string(raw: str) -> str:
+    """Розкодовує вміст JSON-рядка (`\\/`, `\\u0026`), вирізаний регекспом зі сторінки.
+
+    Раніше тут був `.decode('unicode_escape')`, який ламав не-ASCII символи
+    (UTF-8 байти перечитувались як latin-1).
+    """
+    try:
+        return json.loads(f'"{raw}"')
+    except json.JSONDecodeError:
+        return raw.replace('\\/', '/')
+
+
+def extract_threads_media(page_text: str, shortcode: str) -> List[tuple]:
+    """Повертає [(url, ext), ...] для медіа посту в порядку каруселі."""
+    media = []
+    for chunk in page_text.split('"code":"')[1:]:
+        if not chunk.startswith(shortcode + '"'):
+            continue
+        for block in re.findall(r'"video_versions":\[(.*?)\]', chunk):
+            urls = re.findall(r'"url":"([^"]+)"', block)
+            if urls:
+                media.append((_decode_json_string(urls[0]), ".mp4"))
+        for block in re.findall(r'"image_versions2":\{"candidates":\[(.*?)\]\}', chunk):
+            urls = re.findall(r'"url":"([^"]+)"', block)
+            if urls:
+                image_url = _decode_json_string(urls[0])
+                media.append((image_url, ".webp" if ".webp" in image_url else ".jpg"))
+        break
+
+    unique, seen = [], set()
+    for media_url, ext in media:
+        if media_url not in seen:
+            seen.add(media_url)
+            unique.append((media_url, ext))
+    return unique
+
+
+async def download_threads_native(url: str, session_dir: Path, progress_callback=None, max_bytes: int = TIER_LIMITS['free']['size']) -> List[Path]:
+    match = re.search(r'/post/([^/?#]+)', url)
     if not match:
         raise ValueError("Не вдалося знайти ID посту в посиланні Threads.")
     shortcode = match.group(1)
-    
-    def fetch():
-        r = requests.get(url.replace('threads.com', 'threads.net'), headers=headers)
-        if r.status_code != 200:
-            raise Exception("Threads сторінка не завантажилась.")
-        return r.text
-        
+
     if progress_callback:
         await progress_callback(10)
-        
-    text = await asyncio.to_thread(fetch)
-    
-    chunks = text.split('"code":"')
-    media_urls = []
-    
-    for chunk in chunks[1:]:
-        if chunk.startswith(shortcode + '"'):
-            v_blocks = re.findall(r'"video_versions":\[(.*?)\]', chunk)
-            for v in v_blocks:
-                urls = re.findall(r'"url":"([^"]+)"', v)
-                if urls:
-                    media_urls.append(urls[0].replace('\\/', '/'))
-                    
-            i_blocks = re.findall(r'"image_versions2":\{"candidates":\[(.*?)\]\}', chunk)
-            for i in i_blocks:
-                urls = re.findall(r'"url":"([^"]+)"', i)
-                if urls:
-                    media_urls.append(urls[0].replace('\\/', '/'))
-            break
-            
-    unique_urls = list(dict.fromkeys(media_urls))
-    
-    if not unique_urls:
+
+    # Без переписування threads.com -> threads.net: канонічний домен тепер threads.com,
+    # а редіректи safe_get і так пройде (з перевіркою кожного хопу).
+    page = await safe_get(url, max_bytes=THREADS_PAGE_MAX_BYTES, timeout=20, headers=THREADS_HEADERS)
+    media = extract_threads_media(page.body.decode(page.charset or 'utf-8', errors='replace'), shortcode)
+
+    if not media:
         raise Exception("Не вдалося знайти медіа. Threads міг змінити формат сайту або пост не містить фото/відео.")
-        
+
     if progress_callback:
         await progress_callback(30)
-        
-    downloaded = []
-    
-    async def download_file(m_url, index):
-        m_url = m_url.encode('utf-8').decode('unicode_escape')
-        ext = ".mp4" if "video" in m_url or ".mp4" in m_url else ".jpg"
-        if ".webp" in m_url: ext = ".webp"
-        
-        filepath = session_dir / f"threads_{shortcode}_{index}{ext}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(m_url, headers={"User-Agent": headers["User-Agent"]}) as resp:
-                    if resp.status == 200:
-                        content = await resp.read()
-                        with open(filepath, "wb") as f:
-                            f.write(content)
-                        downloaded.append(filepath)
-        except Exception as e:
-            print(f"Помилка завантаження файлу Threads: {e}")
 
-    tasks = []
-    for i, m_url in enumerate(unique_urls[:10]):
-        tasks.append(download_file(m_url, i))
-        
-    await asyncio.gather(*tasks)
-    
+    async def fetch_item(index: int, media_url: str, ext: str):
+        filepath = session_dir / f"threads_{shortcode}_{index:02d}{ext}"
+        try:
+            return await safe_download(
+                media_url, filepath, max_bytes=max_bytes,
+                headers={"User-Agent": THREADS_HEADERS["User-Agent"]},
+            )
+        except ResponseTooLargeError:
+            raise
+        except Exception as e:
+            logger.warning("Threads: не вдалося завантажити %s: %s", media_url, e)
+            return None
+
+    # gather зберігає порядок аргументів, тож порядок каруселі не губиться.
+    results = await asyncio.gather(
+        *(fetch_item(i, media_url, ext) for i, (media_url, ext) in enumerate(media[:THREADS_MAX_ITEMS]))
+    )
+    downloaded = [path for path in results if path is not None]
+
     if progress_callback:
         await progress_callback(100)
-        
+
     if not downloaded:
         raise Exception("Не вдалося завантажити медіа з Threads.")
-        
-    downloaded.sort()
+
     return downloaded
 
-async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None, tier: str = 'free', session_dir: Path = None) -> Union[Path, List[Path]]:
+async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best', progress_callback=None, tier: str = 'free', session_dir: Path = None, meta: Optional[dict] = None) -> Union[Path, List[Path]]:
     """
     Головна асинхронна функція для завантаження медіа.
+
+    `meta` (необов'язковий dict) заповнюється метаданими, які вдалося дізнатись
+    під час завантаження (зараз — `title` від yt-dlp).
     """
+    # Перевірка на SSRF ДО будь-якого бекенду: всі вони ходять у мережу з нашого сервера.
+    await ensure_public_url(url)
+
     loop = asyncio.get_running_loop()
     if session_dir is None:
         session_dir = Path(f"downloads/{time.time_ns()}")
         session_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    max_bytes = TIER_LIMITS[tier]['size']
+
     # Перенаправляємо Instagram на gallery-dl
-    if 'instagram.com' in url:
-        return await download_with_gallery_dl(url, session_dir, progress_callback, tier)
-        
-    # Перенаправляємо Threads на кастомний парсер
-    if 'threads.net' in url or 'threads.com' in url:
-        return await download_threads_native(url, session_dir, progress_callback)
-        
-    # Перенаправляємо фотографії Facebook на gallery-dl (yt-dlp краще працює з відео)
-    if 'facebook.com/photo' in url or 'facebook.com/media' in url:
+    if host_matches(url, 'instagram.com'):
         return await download_with_gallery_dl(url, session_dir, progress_callback, tier)
 
-    if 'spotify.com' in url:
+    # Перенаправляємо Threads на кастомний парсер
+    if host_matches(url, 'threads.net', 'threads.com'):
+        return await download_threads_native(url, session_dir, progress_callback, max_bytes)
+
+    # Перенаправляємо фотографії Facebook на gallery-dl (yt-dlp краще працює з відео)
+    if host_matches(url, 'facebook.com') and urlsplit(url).path.startswith(('/photo', '/media')):
+        return await download_with_gallery_dl(url, session_dir, progress_callback, tier)
+
+    if host_matches(url, 'spotify.com'):
         return await download_with_spotdl(url, session_dir, progress_callback, tier)
-        
-    if 'github.com' in url:
-        if tier == 'free':
-            # We can't easily check github zip size before download, so we just allow it or reject big ones later.
-            pass
-        return await download_github(url, session_dir, progress_callback)
+
+    if host_matches(url, 'github.com'):
+        return await download_github(url, session_dir, progress_callback, max_bytes)
 
     try:
-        # Запускаємо синхронну yt-dlp функцію в ThreadPool, 
+        # Запускаємо синхронну yt-dlp функцію в ThreadPool,
         # щоб не блокувати головний цикл asyncio
         filepath = await asyncio.to_thread(
             download_media_sync,
@@ -497,7 +511,8 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
             progress_callback,
             loop,
             session_dir,
-            tier
+            tier,
+            meta,
         )
         return filepath
     except Exception as e:
