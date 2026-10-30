@@ -18,6 +18,12 @@ class ThrottlingMiddleware(BaseMiddleware):
         data: Dict[str, Any]
     ) -> Any:
 
+        # Повідомлення про оплату не можна відкидати: якщо користувач надіслав будь-що
+        # за секунду до нього, throttling «з'їдав» successful_payment — гроші списані,
+        # а покупка не видана.
+        if isinstance(event, Message) and event.successful_payment:
+            return await handler(event, data)
+
         user_id = None
         if isinstance(event, (Message, CallbackQuery)):
             # Для guest_message рахуємо того, хто покликав бота, а не самого бота.

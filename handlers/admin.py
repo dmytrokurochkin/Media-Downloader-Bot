@@ -385,6 +385,41 @@ async def process_unban(message: Message, state: FSMContext):
     except ValueError:
         await message.reply(get_text(user['language_code'], 'admin_err_id'))
 
+# --- Refund ---
+@admin_router.message(Command("refund"))
+async def refund_command(message: Message):
+    """Повернення Stars за платежем: спершу гроші (Telegram), потім відкат покупки в БД."""
+    if not is_admin(message.from_user.id):
+        return
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+    import html
+    from aiogram.exceptions import TelegramBadRequest
+    from database import get_payment, refund_payment
+
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) < 2:
+        await message.reply(get_text(lang, 'admin_refund_usage'))
+        return
+    charge_id = args[1].strip()
+
+    payment = await get_payment(charge_id)
+    if not payment or payment['status'] != 'paid':
+        await message.reply(get_text(lang, 'admin_refund_not_found'))
+        return
+
+    try:
+        await bot.refund_star_payment(user_id=payment['payer_id'], telegram_payment_charge_id=charge_id)
+    except TelegramBadRequest as e:
+        await message.reply(get_text(lang, 'admin_refund_failed', error=html.escape(str(e))))
+        return
+
+    refunded = await refund_payment(charge_id)
+    if refunded is None:
+        await message.reply(get_text(lang, 'admin_refund_not_found'))
+        return
+    await message.reply(get_text(lang, 'admin_refund_done', amount=refunded['amount'], user_id=refunded['payer_id']))
+
 # --- Ads Management ---
 class AdState(StatesGroup):
     waiting_for_ad_text = State()

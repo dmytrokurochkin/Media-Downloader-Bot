@@ -77,6 +77,9 @@ VIP_TARIFFS = {
     'max_365d': {'tier': 'max', 'days': 365, 'stars': 5000}
 }
 
+# Ціни преміум-тем Mini App у Telegram Stars (одне джерело для інвойсу й перевірки оплати).
+THEME_PRICES = {'neon': 50, 'retro': 50}
+
 # Paths
 # Optional explicit path to a local ffmpeg binary (useful on Windows dev machines
 # where ffmpeg isn't on PATH). Falls back to "ffmpeg" (resolved via PATH) everywhere

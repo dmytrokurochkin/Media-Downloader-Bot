@@ -22,6 +22,11 @@ class BanCheckMiddleware(BaseMiddleware):
         data: Dict[str, Any]
     ) -> Any:
         
+        # Оплата вже відбулась (pre_checkout відхиляє покупки забанених) — її треба
+        # зарахувати, а не відкинути разом з іншими повідомленнями забаненого.
+        if isinstance(event, Message) and event.successful_payment:
+            return await handler(event, data)
+
         # Get user object from event
         user = None
         if isinstance(event, (Message, CallbackQuery, InlineQuery)):

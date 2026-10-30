@@ -112,6 +112,28 @@ async def init_db():
     # Індекси для оптимізації швидкодії
     await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_daily ON downloads(telegram_id, timestamp);')
     await db.execute('CREATE INDEX IF NOT EXISTS idx_user_badges ON user_badges(telegram_id);')
+
+    # Журнал платежів Telegram Stars. charge_id UNIQUE — захист від подвійного
+    # зарахування, якщо Telegram доставить successful_payment повторно. Без цього
+    # журналу неможливо зробити refund (refundStarPayment вимагає charge_id) чи звірку.
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            charge_id TEXT NOT NULL UNIQUE,
+            payer_id INTEGER NOT NULL,
+            beneficiary_id INTEGER NOT NULL,
+            kind TEXT NOT NULL,
+            item TEXT NOT NULL,
+            days INTEGER,
+            amount INTEGER NOT NULL,
+            currency TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'paid',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            refunded_at DATETIME DEFAULT NULL
+        )
+    ''')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_payer ON payments(payer_id, created_at);')
     
     await db.commit()
 
@@ -187,6 +209,17 @@ async def set_user_vip(telegram_id: int, is_vip: bool):
     await _db_connection.execute('UPDATE users SET is_vip = ? WHERE telegram_id = ?', (is_vip, telegram_id))
     await _db_connection.commit()
 
+def compute_vip_until(current_until: Optional[str], current_tier: Optional[str], tier: str, days: int, now: datetime.datetime) -> str:
+    """Нова дата завершення VIP: продовження того ж тарифу або відлік від «зараз» для іншого."""
+    vip_until = now
+    if current_until:
+        from core.utils import parse_db_date
+        current_vip_until = parse_db_date(current_until)
+        if current_vip_until and current_vip_until > now and current_tier == tier:
+            vip_until = current_vip_until
+    return (vip_until + datetime.timedelta(days=days)).isoformat()
+
+
 async def grant_vip(telegram_id: int, days: int, tier: str = 'max') -> str:
     """Видає VIP доступ на задану кількість днів. Повертає нову дату закінчення."""
     global _db_connection
@@ -198,17 +231,8 @@ async def grant_vip(telegram_id: int, days: int, tier: str = 'max') -> str:
         
     if not user:
         raise ValueError("User not found")
-        
-    vip_until = now
-    if user['vip_until']:
-        from core.utils import parse_db_date
-        current_vip_until = parse_db_date(user['vip_until'])
-        if current_vip_until and current_vip_until > now:
-            if user['tier'] == tier:
-                vip_until = current_vip_until
-            
-    new_vip_until = vip_until + datetime.timedelta(days=days)
-    new_vip_until_iso = new_vip_until.isoformat()
+
+    new_vip_until_iso = compute_vip_until(user['vip_until'], user['tier'], tier, days, now)
     
     await db.execute('UPDATE users SET is_vip = 1, vip_until = ?, tier = ? WHERE telegram_id = ?', (new_vip_until_iso, tier, telegram_id))
     await db.commit()
@@ -524,3 +548,154 @@ async def mark_retention_promo_received(telegram_id: int):
         await _db_connection.execute('UPDATE users SET retention_promo_received = 1 WHERE telegram_id = ?', (telegram_id,))
         await _db_connection.commit()
 
+
+async def get_user(telegram_id: int) -> Optional[dict]:
+    """Читає користувача БЕЗ створення та без зміни імені.
+
+    get_or_create_user(id, "", "") для «чужого» користувача (після оплати, у
+    відповіді адміна) затирав у БД його username і ім'я порожніми рядками —
+    до наступної активності він зникав з лідерборду й пошуку.
+    """
+    global _db_connection
+    async with _db_connection.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+        row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+# --- Платежі ---
+
+async def _open_write_transaction() -> aiosqlite.Connection:
+    """Окреме з'єднання з BEGIN IMMEDIATE для багатокрокових транзакцій.
+
+    Основне з'єднання спільне для всіх корутин: commit() будь-якої з них зафіксував
+    би половину нашої транзакції. Окреме з'єднання в режимі WAL захоплює блокування
+    запису, тож запис платежу й видача покупки відбуваються атомарно.
+    """
+    conn = await aiosqlite.connect(DB_PATH, timeout=20.0)
+    conn.row_factory = aiosqlite.Row
+    await conn.execute('BEGIN IMMEDIATE')
+    return conn
+
+
+async def _payment_exists(conn: aiosqlite.Connection, charge_id: str) -> bool:
+    async with conn.execute('SELECT 1 FROM payments WHERE charge_id = ?', (charge_id,)) as cursor:
+        return await cursor.fetchone() is not None
+
+
+async def apply_vip_purchase(charge_id: str, payer_id: int, beneficiary_id: int, item: str, tier: str, days: int,
+                             amount: int, currency: str, payload: str) -> Optional[str]:
+    """Атомарно записує платіж і продовжує VIP. Повертає нову дату або None для повтору того ж charge_id."""
+    conn = await _open_write_transaction()
+    try:
+        if await _payment_exists(conn, charge_id):
+            await conn.rollback()
+            return None
+        async with conn.execute('SELECT vip_until, tier FROM users WHERE telegram_id = ?', (beneficiary_id,)) as cursor:
+            user = await cursor.fetchone()
+        if not user:
+            raise ValueError("User not found")
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        new_until = compute_vip_until(user['vip_until'], user['tier'], tier, days, now)
+        await conn.execute('UPDATE users SET is_vip = 1, vip_until = ?, tier = ? WHERE telegram_id = ?', (new_until, tier, beneficiary_id))
+        await conn.execute('''
+            INSERT INTO payments (charge_id, payer_id, beneficiary_id, kind, item, days, amount, currency, payload)
+            VALUES (?, ?, ?, 'vip', ?, ?, ?, ?, ?)
+        ''', (charge_id, payer_id, beneficiary_id, item, days, amount, currency, payload))
+        await conn.commit()
+        return new_until
+    except BaseException:
+        await conn.rollback()
+        raise
+    finally:
+        await conn.close()
+
+
+async def apply_theme_purchase(charge_id: str, payer_id: int, beneficiary_id: int, theme: str,
+                               amount: int, currency: str, payload: str) -> bool:
+    """Атомарно записує платіж, додає тему у власність і вмикає її. False — повтор того ж charge_id."""
+    conn = await _open_write_transaction()
+    try:
+        if await _payment_exists(conn, charge_id):
+            await conn.rollback()
+            return False
+        async with conn.execute('SELECT owned_themes FROM users WHERE telegram_id = ?', (beneficiary_id,)) as cursor:
+            user = await cursor.fetchone()
+        if not user:
+            raise ValueError("User not found")
+
+        owned = [t for t in (user['owned_themes'] or 'standard').split(',') if t]
+        if theme not in owned:
+            owned.append(theme)
+        await conn.execute('UPDATE users SET owned_themes = ?, theme = ? WHERE telegram_id = ?', (",".join(owned), theme, beneficiary_id))
+        await conn.execute('''
+            INSERT INTO payments (charge_id, payer_id, beneficiary_id, kind, item, amount, currency, payload)
+            VALUES (?, ?, ?, 'theme', ?, ?, ?, ?)
+        ''', (charge_id, payer_id, beneficiary_id, theme, amount, currency, payload))
+        await conn.commit()
+        return True
+    except BaseException:
+        await conn.rollback()
+        raise
+    finally:
+        await conn.close()
+
+
+async def get_payment(charge_id: str) -> Optional[dict]:
+    global _db_connection
+    async with _db_connection.execute('SELECT * FROM payments WHERE charge_id = ?', (charge_id,)) as cursor:
+        row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def get_user_payments(telegram_id: int, limit: int = 5) -> List[dict]:
+    global _db_connection
+    async with _db_connection.execute('''
+        SELECT charge_id, kind, item, amount, currency, status, created_at
+        FROM payments WHERE payer_id = ? ORDER BY id DESC LIMIT ?
+    ''', (telegram_id, limit)) as cursor:
+        return [dict(r) for r in await cursor.fetchall()]
+
+
+async def refund_payment(charge_id: str) -> Optional[dict]:
+    """Позначає платіж повернутим і відкочує покупку. None — платежу немає або він уже повернений.
+
+    VIP: дата завершення зсувається назад на куплені дні (якщо минула — тариф free).
+    Тема: прибирається з куплених, а якщо була активна — повертається standard.
+    Гроші повертає виклик Telegram refundStarPayment — його робить хендлер ДО цього.
+    """
+    conn = await _open_write_transaction()
+    try:
+        async with conn.execute("SELECT * FROM payments WHERE charge_id = ? AND status = 'paid'", (charge_id,)) as cursor:
+            payment = await cursor.fetchone()
+        if not payment:
+            await conn.rollback()
+            return None
+        payment = dict(payment)
+
+        async with conn.execute('SELECT vip_until, tier, owned_themes, theme FROM users WHERE telegram_id = ?', (payment['beneficiary_id'],)) as cursor:
+            user = await cursor.fetchone()
+
+        if user and payment['kind'] == 'vip' and user['vip_until']:
+            from core.utils import parse_db_date
+            current_until = parse_db_date(user['vip_until'])
+            now = datetime.datetime.now(datetime.timezone.utc)
+            if current_until:
+                rolled_back = current_until - datetime.timedelta(days=payment['days'] or 0)
+                if rolled_back <= now:
+                    await conn.execute("UPDATE users SET is_vip = 0, vip_until = NULL, tier = 'free' WHERE telegram_id = ?", (payment['beneficiary_id'],))
+                else:
+                    await conn.execute('UPDATE users SET vip_until = ? WHERE telegram_id = ?', (rolled_back.isoformat(), payment['beneficiary_id']))
+        elif user and payment['kind'] == 'theme':
+            owned = [t for t in (user['owned_themes'] or 'standard').split(',') if t and t != payment['item']] or ['standard']
+            active = user['theme'] if user['theme'] != payment['item'] else 'standard'
+            await conn.execute('UPDATE users SET owned_themes = ?, theme = ? WHERE telegram_id = ?', (",".join(owned), active, payment['beneficiary_id']))
+
+        await conn.execute("UPDATE payments SET status = 'refunded', refunded_at = CURRENT_TIMESTAMP WHERE charge_id = ?", (charge_id,))
+        await conn.commit()
+        return payment
+    except BaseException:
+        await conn.rollback()
+        raise
+    finally:
+        await conn.close()
