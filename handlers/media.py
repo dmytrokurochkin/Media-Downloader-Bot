@@ -1,7 +1,9 @@
 import asyncio
+import logging
 import re
 import time
 import uuid
+from typing import Optional
 from pathlib import Path
 from core.utils import delete_later, temporary_download_session
 
@@ -24,6 +26,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 media_router = Router()
+logger = logging.getLogger(__name__)
 
 class AudioEditorState(StatesGroup):
     waiting_for_cover = State()
@@ -73,6 +76,46 @@ class ProgressTracker:
                 )
             except Exception:
                 pass
+
+async def get_download_block_reason(user: dict, url: str) -> Optional[str]:
+    """Ключ локалі з причиною відмови або None.
+
+    Одні правила для всіх точок входу (посилання, гостьовий режим, Smart Trim,
+    редактор тегів у Mini App): раніше частина з них не перевіряла денний ліміт
+    і заборонені посилання взагалі.
+    """
+    if FORBIDDEN_URL_PATTERN.search(url):
+        return 'link_rejected'
+    limits = TIER_LIMITS.get(user.get('tier', 'free'), TIER_LIMITS['free'])
+    if await get_daily_download_count(user['telegram_id']) >= limits['daily']:
+        return 'limit_reached'
+    return None
+
+
+async def _notify_download_blocked(message: Message, reason_key: str, lang: str, is_guest_mode: bool, is_callback: bool):
+    """Пояснює користувачу, чому завантаження не почалось."""
+    text = get_text(lang, reason_key)
+    try:
+        if is_guest_mode:
+            # Гостьовий запит треба закрити відповіддю, інакше в користувача висить «завантаження».
+            if getattr(message, "guest_query_id", None):
+                plain = re.sub(r'<[^>]+>', '', text)
+                await message.answer_guest_query(result=InlineQueryResultArticle(
+                    id=str(uuid.uuid4()),
+                    title=plain.split('\n', 1)[0][:64],
+                    description=plain[:200],
+                    input_message_content=InputTextMessageContent(message_text=text)
+                ))
+            return
+        if is_callback:
+            await bot.edit_message_text(text, chat_id=message.chat.id, message_id=message.message_id)
+            notice = message
+        else:
+            notice = await message.reply(text)
+        asyncio.create_task(delete_later(bot, notice.chat.id, notice.message_id, 30))
+    except Exception as e:
+        logger.debug("Could not notify about blocked download: %s", e)
+
 
 @media_router.guest_message()
 async def guest_text_handler(message: Message):
@@ -258,12 +301,8 @@ async def process_url(message: Message, url: str, user: dict, is_guest_mode: boo
         await start_download(message, url, 'bestaudio/best', user, is_guest_mode=is_guest_mode, state=state)
     elif 'youtube.com' in url or 'youtu.be' in url:
         if is_guest_mode:
-            quality = user.get('guest_yt_quality', 'best')
-            tier = user.get('tier', 'free')
-            if tier == 'free' and quality in ['best', '1080p']:
-                quality = '720p'
-            elif tier == 'pro' and quality == 'best':
-                quality = '1080p'
+            from core.webapp_data import normalize_guest_quality
+            quality = normalize_guest_quality(user.get('guest_yt_quality'), user.get('tier', 'free'))
                 
             if quality == '1080p':
                 fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
@@ -503,8 +542,27 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
                 except Exception: pass
     return file_size
 
-async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False, state=None):
+async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False, state=None) -> bool:
     lang = user['language_code']
+    user_id = user['telegram_id']
+
+    # Cooldown перевіряється й захоплюється без await між ними. Раніше перевірка
+    # була в хендлерах, а захоплення — тут, після кількох await-ів, тож два швидкі
+    # запити (наприклад, посилання + Mini App) проходили обидва.
+    if user_id in user_cooldowns:
+        await _notify_download_blocked(message, 'cooldown', lang, is_guest_mode, is_callback)
+        return False
+    user_cooldowns.add(user_id)
+    try:
+        block_reason = await get_download_block_reason(user, url)
+    except BaseException:
+        user_cooldowns.discard(user_id)
+        raise
+    if block_reason:
+        user_cooldowns.discard(user_id)
+        await _notify_download_blocked(message, block_reason, lang, is_guest_mode, is_callback)
+        return False
+
     target_chat = getattr(message, "guest_bot_caller_chat", None) or message.chat
     target_chat_id = target_chat.id if is_guest_mode else message.chat.id
     
@@ -540,8 +598,6 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                 status_msg = await bot.send_message(target_chat_id, status_text)
             
     tracker = ProgressTracker(status_msg, bot, lang) if not is_guest_mode else None
-    
-    user_cooldowns.add(user['telegram_id'])
     
     filepath = None
     success = False
@@ -648,13 +704,23 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
             except Exception:
                 pass
 
+    return success
+
 async def process_smart_trim(message: Message, user: dict, url: str, start_sec: int, end_sec: int, status_msg: Message):
     global active_downloads, queue_waiters, active_requests
     lang = user['language_code']
+    user_id = user['telegram_id']
 
     if active_requests > 100:
         await bot.edit_message_text(get_text(lang, 'too_many_requests'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         return
+
+    # Smart Trim раніше взагалі не дивився на cooldown: можна було паралельно
+    # запускати обрізки й звичайні завантаження.
+    if user_id in user_cooldowns:
+        await bot.edit_message_text(get_text(lang, 'cooldown'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        return
+    user_cooldowns.add(user_id)
 
     active_requests += 1
     queue_waiters += 1
@@ -725,3 +791,4 @@ async def process_smart_trim(message: Message, user: dict, url: str, start_sec: 
              await bot.edit_message_text(f"❌ Помилка при обрізці відео: {err_str}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
     finally:
         active_requests -= 1
+        user_cooldowns.discard(user_id)

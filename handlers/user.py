@@ -1,5 +1,5 @@
 import html
-import traceback
+import logging
 from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import CommandStart, Command
@@ -8,7 +8,6 @@ from aiogram.fsm.state import State, StatesGroup
 
 from database import get_or_create_user, get_daily_download_count, set_user_language, set_guest_yt_quality, get_top_users, get_top_domains, update_user_settings, get_user_stats, set_watermark_file_id
 from locales import get_text
-import json
 from keyboards.inline import get_lang_keyboard, get_guest_quality_keyboard, get_settings_main_keyboard, get_onboarding_keyboard
 from keyboards.reply import get_main_keyboard
 from core.config import TIER_LIMITS, ADMIN_IDS
@@ -17,6 +16,7 @@ from core.utils import delete_later
 from core.loader import bot
 
 user_router = Router()
+logger = logging.getLogger(__name__)
 
 class SupportState(StatesGroup):
     waiting_for_message = State()
@@ -157,29 +157,42 @@ async def watermark_button_handler(message: Message, state: FSMContext):
 async def web_app_data_handler(message: Message, state: FSMContext):
     asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+
+    from pydantic import ValidationError
+    from core.webapp_data import parse_webapp_payload, SaveSettings, BuyTheme, SmartTrim, EditTags
+
+    # sendData можна викликати з довільним JSON (інспектор WebView), тож спершу —
+    # строга схема: типи, межі та allowlist значень (див. core/webapp_data.py).
     try:
-        data = json.loads(message.web_app_data.data)
-        if data.get('action') == 'save_settings':
-            language = data.get('language', user['language_code'])
-            guest_yt_quality = data.get('default_quality', user.get('guest_yt_quality', 'best'))
-            is_anonymous = int(data.get('is_anonymous', 0))
-            theme = data.get('theme', 'standard')
-            owned_themes = user.get('owned_themes', 'standard').split(',')
-            
+        payload = parse_webapp_payload(message.web_app_data.data)
+    except ValidationError as e:
+        logger.info("Rejected web_app_data from %s: %s", message.from_user.id, e.errors(include_url=False)[:3])
+        msg = await message.answer(get_text(lang, 'webapp_invalid_data'))
+        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        return
+
+    try:
+        if isinstance(payload, SaveSettings):
+            language = payload.language or lang
+            guest_yt_quality = payload.default_quality or user.get('guest_yt_quality', 'best')
+            theme = payload.theme or 'standard'
+            owned_themes = (user.get('owned_themes') or 'standard').split(',')
+
             if message.from_user.id in ADMIN_IDS:
                 owned_themes = ['standard', 'neon', 'retro']
-                
+
             if theme not in owned_themes:
                 theme = 'standard'
-            watermark_position = data.get('watermark_position', 'bottom_right')
-            
-            await update_user_settings(message.from_user.id, language, guest_yt_quality, is_anonymous, theme, watermark_position)
-            
+            watermark_position = payload.watermark_position or user.get('watermark_position', 'bottom_right')
+
+            await update_user_settings(message.from_user.id, language, guest_yt_quality, int(payload.is_anonymous), theme, watermark_position)
+
             success_text = get_text(language, 'settings_saved_webapp')
             msg = await message.answer(success_text)
             asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
-            
-            if data.get('watermark_updated'):
+
+            if payload.watermark_updated:
                 if user.get('tier') == 'max':
                     await state.set_state(WatermarkState.waiting_for_photo)
                     msg2 = await message.answer(get_text(language, 'send_watermark_photo'))
@@ -187,83 +200,66 @@ async def web_app_data_handler(message: Message, state: FSMContext):
                 else:
                     msg2 = await message.answer(get_text(language, 'watermark_max_only'))
                     asyncio.create_task(delete_later(bot, msg2.chat.id, msg2.message_id, 30))
-        elif data.get('action') == 'buy_theme':
-            theme = data.get('theme')
+
+        elif isinstance(payload, BuyTheme):
             from handlers.payment import send_theme_invoice
-            await send_theme_invoice(message, theme, user)
-        elif data.get('action') == 'smart_trim':
-            from handlers.media import process_smart_trim
-            url = data.get('url')
-            start_sec = data.get('start_sec')
-            end_sec = data.get('end_sec')
-            
-            duration = end_sec - start_sec
-            tier = user.get('tier', 'free')
-            
-            if tier == 'free' and duration > 30:
-                text = "⚠️ Безкоштовний тариф дозволяє нарізати фрагменти до 30 секунд. Придбайте Pro або зменшіть тривалість."
-                if user['language_code'] == 'en':
-                    text = "⚠️ Free tier allows trimming up to 30 seconds. Buy Pro or reduce duration."
-                elif user['language_code'] == 'pl':
-                    text = "⚠️ Darmowy plan pozwala na wycinanie do 30 sekund. Kup Pro lub zmniejsz czas."
-                msg = await message.answer(text)
+            await send_theme_invoice(message, payload.theme, user)
+
+        elif isinstance(payload, SmartTrim):
+            from handlers.media import process_smart_trim, get_download_block_reason
+            from core.config import FREE_TRIM_MAX_SECONDS
+
+            if user.get('tier', 'free') == 'free' and payload.duration > FREE_TRIM_MAX_SECONDS:
+                msg = await message.answer(get_text(lang, 'trim_free_limit', seconds=FREE_TRIM_MAX_SECONDS))
                 asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                 return
-            
-            msg = await message.answer(get_text(user['language_code'], 'starting_download'))
-            asyncio.create_task(process_smart_trim(message, user, url, start_sec, end_sec, msg))
-        elif data.get('action') == 'edit_tags':
-            from handlers.media import AudioEditorState, process_url
-            url = data.get('url')
-            title = data.get('title', '')
-            artist = data.get('artist', '')
-            album = data.get('album', '')
-            has_cover = data.get('has_cover', False)
-            
-            tier = user.get('tier', 'free')
-            if tier == 'free':
-                text = "⚠️ Редагування тегів доступне лише для тарифів Pro та Max."
-                if user['language_code'] == 'en':
-                    text = "⚠️ Tag editing is only available for Pro and Max tiers."
-                elif user['language_code'] == 'pl':
-                    text = "⚠️ Edycja tagów jest dostępna tylko dla planów Pro i Max."
-                msg = await message.answer(text)
+
+            # Ті самі правила, що й для звичайного посилання: заборонені URL, денний ліміт.
+            block_reason = await get_download_block_reason(user, payload.url)
+            if block_reason:
+                msg = await message.answer(get_text(lang, block_reason))
                 asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
                 return
-                
-            if has_cover:
+
+            msg = await message.answer(get_text(lang, 'starting_download'))
+            asyncio.create_task(process_smart_trim(message, user, payload.url, payload.start_sec, payload.end_sec, msg))
+
+        elif isinstance(payload, EditTags):
+            from handlers.media import AudioEditorState, process_url, get_download_block_reason
+
+            if user.get('tier', 'free') == 'free':
+                msg = await message.answer(get_text(lang, 'tags_pro_only'))
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+                return
+
+            block_reason = await get_download_block_reason(user, payload.url)
+            if block_reason:
+                msg = await message.answer(get_text(lang, block_reason))
+                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+                return
+
+            if payload.has_cover:
                 await state.set_state(AudioEditorState.waiting_for_cover)
                 await state.update_data(
-                    url=url,
-                    title=title,
-                    artist=artist,
-                    album=album
+                    url=payload.url,
+                    title=payload.title,
+                    artist=payload.artist,
+                    album=payload.album
                 )
-                text = "🖼 Надішліть фотографію для обкладинки треку (як звичайне фото, не файл)."
-                if user['language_code'] == 'en':
-                    text = "🖼 Send a photo for the track cover (as a photo, not a file)."
-                elif user['language_code'] == 'pl':
-                    text = "🖼 Wyślij zdjęcie na okładkę utworu (jako zdjęcie, nie jako plik)."
-                await message.answer(text)
+                await message.answer(get_text(lang, 'send_cover_photo'))
             else:
                 await state.update_data(
                     edit_tags=True,
-                    title=title,
-                    artist=artist,
-                    album=album,
+                    title=payload.title,
+                    artist=payload.artist,
+                    album=payload.album,
                     cover_path=None
                 )
-                await process_url(message, url, user, is_guest_mode=False, state=state)
+                await process_url(message, payload.url, user, is_guest_mode=False, state=state)
     except Exception as e:
-        print("Error handling web_app_data:", e)
-        traceback.print_exc()
+        logger.exception("Error handling web_app_data from %s", message.from_user.id)
         try:
-            text = f"⚠️ Помилка: {html.escape(str(e))}"
-            if user['language_code'] == 'en':
-                text = f"⚠️ Error: {html.escape(str(e))}"
-            elif user['language_code'] == 'pl':
-                text = f"⚠️ Błąd: {html.escape(str(e))}"
-            msg = await message.answer(text)
+            msg = await message.answer(get_text(lang, 'webapp_error', error=html.escape(str(e)[:300])))
             asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
         except Exception:
             pass

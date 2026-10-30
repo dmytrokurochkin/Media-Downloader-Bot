@@ -44,6 +44,9 @@ TIER_LIMITS = {
 MAX_ACTIVE_REQUESTS = 15
 MAX_CONCURRENT_DOWNLOADS = 3
 
+# Smart Trim: максимальна тривалість фрагмента для Free (секунди).
+FREE_TRIM_MAX_SECONDS = 30
+
 # Regular Expressions
 URL_PATTERN = re.compile(r'https?://[^\s]+')
 FORBIDDEN_URL_PATTERN = re.compile(r'(/artist/|/channel/|/user/|/c/)')

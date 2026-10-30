@@ -33,11 +33,15 @@ async def main():
     throttling = ThrottlingMiddleware(rate_limit=1.0)
     dp.message.outer_middleware(throttling)
     dp.callback_query.outer_middleware(throttling)
-    
+    dp.guest_message.outer_middleware(throttling)
+
+    # guest_message — окремий тип апдейту: без явної реєстрації бан і троттлінг
+    # на гостьовий режим не діяли взагалі.
     ban_middleware = BanCheckMiddleware()
     dp.message.outer_middleware(ban_middleware)
     dp.callback_query.outer_middleware(ban_middleware)
     dp.inline_query.outer_middleware(ban_middleware)
+    dp.guest_message.outer_middleware(ban_middleware)
 
     allowed = dp.resolve_used_update_types()
     if "guest_message" not in allowed:

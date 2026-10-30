@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineQuery
 from typing import Callable, Dict, Any, Awaitable
 from database import get_or_create_user, update_last_active
 from locales import get_text
+from core.utils import get_event_user
 import datetime
 
 # Кеш для кулдауну повідомлень про бан (user_id -> datetime)
@@ -24,7 +25,10 @@ class BanCheckMiddleware(BaseMiddleware):
         # Get user object from event
         user = None
         if isinstance(event, (Message, CallbackQuery, InlineQuery)):
-            user = event.from_user
+            # guest_message — теж Message, але from_user там сам бот (див. get_event_user):
+            # без цього забанений користувач спокійно качав через гостьовий режим.
+            user = get_event_user(event)
+        is_guest = bool(getattr(event, "guest_query_id", None))
             
         if user:
             # We fetch or create the user to check their ban status
@@ -61,7 +65,18 @@ class BanCheckMiddleware(BaseMiddleware):
                             
                         ban_msg = get_text(db_user['language_code'], 'banned_bot', until=formatted_date)
                         
-                        if isinstance(event, Message):
+                        if is_guest:
+                            # У гостьовому режимі звичайна відповідь неможлива — лише answer_guest_query.
+                            from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
+                            import uuid
+                            res = InlineQueryResultArticle(
+                                id=str(uuid.uuid4()),
+                                title="⛔️",
+                                description=ban_msg.replace('<b>', '').replace('</b>', '')[:200],
+                                input_message_content=InputTextMessageContent(message_text=ban_msg, parse_mode="HTML")
+                            )
+                            await event.answer_guest_query(result=res)
+                        elif isinstance(event, Message):
                             await event.reply(ban_msg, parse_mode="HTML")
                         elif isinstance(event, CallbackQuery):
                             clean_msg = ban_msg.replace('<b>', '').replace('</b>', '')

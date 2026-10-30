@@ -103,7 +103,12 @@ LOCALES = {
         "admin_ad_not_found": "❌ Немає активної реклами.",
         "user_pdf_prompt": "Надішліть посилання на статтю, яку потрібно зберегти як PDF:",
         "too_many_requests": "⚠️ Забагато активних запитів зараз. Спробуйте, будь ласка, трохи пізніше.",
-        "unsafe_url": "⛔️ <b>Це посилання не можна відкрити.</b>\nВоно веде у приватну мережу, на нестандартний порт або містить логін/пароль. Надішліть звичайне посилання на сторінку з медіа."
+        "unsafe_url": "⛔️ <b>Це посилання не можна відкрити.</b>\nВоно веде у приватну мережу, на нестандартний порт або містить логін/пароль. Надішліть звичайне посилання на сторінку з медіа.",
+        "webapp_invalid_data": "⚠️ Не вдалося обробити дані з Mini App. Перевірте поля й спробуйте ще раз.",
+        "trim_free_limit": "⚠️ Безкоштовний тариф дозволяє нарізати фрагменти до {seconds} секунд. Придбайте Pro або зменшіть тривалість.",
+        "tags_pro_only": "⚠️ Редагування тегів доступне лише для тарифів Pro та Max.",
+        "send_cover_photo": "🖼 Надішліть фотографію для обкладинки треку (як звичайне фото, не файл).",
+        "webapp_error": "⚠️ Помилка: {error}"
     },
     "en": {
         "start": "👋 <b>Hello! I am your personal fast media downloader!</b>\n\nI can download photos, videos and audio from the most popular platforms: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook and GitHub</b>.\n\n👇 Just send me a link to a video or post, or use the menu buttons below for settings and more info!",
@@ -206,7 +211,12 @@ LOCALES = {
         "admin_ad_not_found": "❌ No active ad.",
         "user_pdf_prompt": "Send the link to the article you want to save as PDF:",
         "too_many_requests": "⚠️ Too many active requests right now. Please try again in a moment.",
-        "unsafe_url": "⛔️ <b>This link can't be opened.</b>\nIt points to a private network, uses a non-standard port or contains login credentials. Please send a regular link to a media page."
+        "unsafe_url": "⛔️ <b>This link can't be opened.</b>\nIt points to a private network, uses a non-standard port or contains login credentials. Please send a regular link to a media page.",
+        "webapp_invalid_data": "⚠️ Could not process the data from the Mini App. Check the fields and try again.",
+        "trim_free_limit": "⚠️ The free tier allows clips of up to {seconds} seconds. Buy Pro or shorten the clip.",
+        "tags_pro_only": "⚠️ Tag editing is only available for Pro and Max tiers.",
+        "send_cover_photo": "🖼 Send a photo for the track cover (as a photo, not a file).",
+        "webapp_error": "⚠️ Error: {error}"
     },
     "pl": {
         "start": "👋 <b>Cześć! Jestem twoim osobistym szybkim downloaderem multimediów!</b>\n\nPotrafię pobierać zdjęcia, filmy i dźwięk z najpopularniejszych platform: <b>YouTube, YouTube Music, SoundCloud, Spotify, TikTok, Instagram, Threads, Facebook i GitHub</b>.\n\n👇 Po prostu wyślij mi link do filmu lub posta, albo użyj przycisków menu poniżej, aby uzyskać ustawienia i więcej informacji!",
@@ -310,7 +320,12 @@ LOCALES = {
         "admin_ad_not_found": "❌ Brak aktywnej reklamy.",
         "user_pdf_prompt": "Wyślij link do artykułu, który chcesz zapisać jako PDF:",
         "too_many_requests": "⚠️ Zbyt wiele aktywnych żądań. Spróbuj ponownie za chwilę.",
-        "unsafe_url": "⛔️ <b>Tego linku nie można otworzyć.</b>\nProwadzi do sieci prywatnej, używa niestandardowego portu lub zawiera dane logowania. Wyślij zwykły link do strony z multimediami."
+        "unsafe_url": "⛔️ <b>Tego linku nie można otworzyć.</b>\nProwadzi do sieci prywatnej, używa niestandardowego portu lub zawiera dane logowania. Wyślij zwykły link do strony z multimediami.",
+        "webapp_invalid_data": "⚠️ Nie udało się przetworzyć danych z Mini App. Sprawdź pola i spróbuj ponownie.",
+        "trim_free_limit": "⚠️ Darmowy plan pozwala na wycinanie fragmentów do {seconds} sekund. Kup Pro lub skróć fragment.",
+        "tags_pro_only": "⚠️ Edycja tagów jest dostępna tylko dla planów Pro i Max.",
+        "send_cover_photo": "🖼 Wyślij zdjęcie na okładkę utworu (jako zdjęcie, nie jako plik).",
+        "webapp_error": "⚠️ Błąd: {error}"
     }
 }
 

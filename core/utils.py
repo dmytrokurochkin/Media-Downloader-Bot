@@ -11,6 +11,17 @@ async def delete_later(bot_instance, chat_id: int, message_id: int, delay: int =
     except Exception:
         pass
 
+def get_event_user(event):
+    """Хто насправді надіслав апдейт.
+
+    У guest_message (Bot API 10.0) `from_user` — це САМ БОТ, а справжній
+    відправник лежить у `guest_bot_caller_user`. Middleware, які дивились лише
+    на from_user, у гостьовому режимі перевіряли бан/ліміт самого бота.
+    """
+    caller = getattr(event, "guest_bot_caller_user", None)
+    return caller or getattr(event, "from_user", None)
+
+
 def parse_db_date(date_str: str) -> datetime.datetime:
     """Parses a SQLite ISO datetime string into an aware UTC datetime object."""
     if not date_str: return None
