@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from aiogram.types import ErrorEvent
+
 from core.loader import bot, dp
 from database import init_db, init_db_connection, close_db_connection
 from handlers.user import user_router
@@ -12,12 +14,19 @@ from core.scheduler import retention_drip_campaign
 from middlewares.throttling import ThrottlingMiddleware
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+async def on_error(event: ErrorEvent):
+    # Без глобального обробника aiogram лише друкує traceback, а користувач лишається
+    # без відповіді. Тут — єдине місце, де видно КОЖНУ необроблену помилку хендлера.
+    logger.error("Unhandled error while processing update %s", event.update.update_id, exc_info=event.exception)
+    return True
+
 
 async def main():
     await init_db_connection()
     await init_db()
-    
-    dp.shutdown.register(close_db_connection)
 
     # Залишки сесій, перерваних попереднім рестартом. Безпечно лише тут: жодне
     # завантаження ще не почалось.
@@ -31,6 +40,7 @@ async def main():
     dp.include_router(admin_router)
     dp.include_router(payment_router)
     dp.include_router(media_router)
+    dp.errors.register(on_error)
     
     # Підключення Middleware
     throttling = ThrottlingMiddleware(rate_limit=1.0)
@@ -59,10 +69,15 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, API_HOST, API_PORT, reuse_address=True)
     await site.start()
+    # Спершу зупиняємо API, потім закриваємо БД, якою користуються його хендлери.
+    dp.shutdown.register(runner.cleanup)
+    dp.shutdown.register(close_db_connection)
     logging.info("API Server started on %s:%s", API_HOST, API_PORT)
     
-    # Запуск фонової задачі для retention (утримання)
-    asyncio.create_task(retention_drip_campaign(bot))
+    # Запуск фонової задачі для retention (утримання). spawn тримає посилання на задачу,
+    # інакше збирач сміття міг прибрати її посеред сну на добу.
+    from core.utils import spawn
+    spawn(retention_drip_campaign(bot))
     
     await dp.start_polling(bot, allowed_updates=allowed)
 

@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 import yt_dlp
 from core.config import TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, YTDLP_COOKIES_FROM_BROWSER
 from core.net_guard import FetchError, ResponseTooLargeError, ensure_public_url, safe_download, safe_get
-from core.utils import run_command
+from core.utils import host_matches, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +46,6 @@ class DownloadTimeoutError(Exception):
 
 class DownloadFailedError(Exception):
     """Завантаження не вдалося; текст — справжня причина від бекенду."""
-
-
-def host_matches(url: str, *domains: str) -> bool:
-    """True, якщо хост URL — це один із доменів або його піддомен.
-
-    Перевірка підрядком (`'instagram.com' in url`) ловила й `https://evil.com/?x=instagram.com`,
-    тож маршрутизація йде лише за справжнім хостом.
-    """
-    host = (urlsplit(url).hostname or "").lower()
-    return any(host == domain or host.endswith("." + domain) for domain in domains)
 
 
 def is_leftover_file(path: Path) -> bool:

@@ -1,12 +1,47 @@
 import urllib.parse
 from database import get_top_users, get_top_domains, get_user_stats
 from core.config import TIER_LIMITS, ADMIN_IDS, PUBLIC_API_URL, WEBAPP_URL
+from core.utils import domain_matches
 
 # Імена в лідерборді обрізаються: топ-10 повних імен (кирилиця/емодзі × percent-encoding)
 # роздували URL кнопки Mini App до кількох КБ.
 LEADERBOARD_NAME_LIMIT = 24
 OWN_NAME_LIMIT = 64
 DOMAIN_LIMIT = 40
+
+
+# Домени → назва сервісу в лідербордах. Порядок важливий: music.youtube.com має
+# перевірятися раніше за youtube.com. Порівняння — за хостом, а не підрядком:
+# раніше `'youtube' in domain` зараховував до YouTube і notyoutube.example.
+SERVICE_NAMES = (
+    ('YouTube Music', ('music.youtube.com',)),
+    ('YouTube', ('youtube.com', 'youtu.be')),
+    ('Instagram', ('instagram.com',)),
+    ('TikTok', ('tiktok.com',)),
+    ('Spotify', ('spotify.com',)),
+    ('SoundCloud', ('soundcloud.com',)),
+    ('Threads', ('threads.net', 'threads.com')),
+    ('Facebook', ('facebook.com', 'fb.watch')),
+    ('GitHub', ('github.com',)),
+)
+
+
+def service_name(domain: str) -> str:
+    # Старі записи зберігали netloc цілком, разом з `user@` і `:порт`.
+    host = (domain or '').lower().rsplit('@', 1)[-1].split(':', 1)[0]
+    for name, domains in SERVICE_NAMES:
+        if domain_matches(host, *domains):
+            return name
+    return host.removeprefix('www.') or 'unknown'
+
+
+def merge_top_domains(rows, limit: int = 10) -> list:
+    """Зводить сирі домени (youtube.com, m.youtube.com, youtu.be…) до сервісів і повертає топ."""
+    merged = {}
+    for row in rows:
+        name = service_name(row['domain'])
+        merged[name] = merged.get(name, 0) + row['count']
+    return sorted(merged.items(), key=lambda item: item[1], reverse=True)[:limit]
 
 
 def clean_display_text(value, limit: int, fallback: str = "User") -> str:
@@ -44,31 +79,7 @@ async def generate_webapp_url(user: dict, used_downloads: int, bot_username: str
     # Format: ID:Name:Count,ID:Name:Count
     tu_str = ",".join([f"{u.get('telegram_id')}:{clean_display_text(u.get('full_name'), LEADERBOARD_NAME_LIMIT)}:{u['count']}" for u in top_users_data])
     
-    top_sites_data = await get_top_domains()
-    domain_mapping = {
-        'YouTube Music': ['music.youtube.com'],
-        'YouTube': ['youtube.com', 'youtu.be', 'www.youtube.com', 'm.youtube.com', 'youtube'],
-        'Instagram': ['instagram.com', 'www.instagram.com', 'm.instagram.com'],
-        'TikTok': ['tiktok.com', 'www.tiktok.com', 'vm.tiktok.com', 'm.tiktok.com'],
-        'Spotify': ['spotify.com', 'open.spotify.com'],
-        'SoundCloud': ['soundcloud.com', 'on.soundcloud.com', 'm.soundcloud.com'],
-        'Threads': ['threads.net', 'www.threads.net', 'threads.com'],
-        'Facebook': ['facebook.com', 'www.facebook.com', 'fb.watch', 'm.facebook.com'],
-        'GitHub': ['github.com', 'www.github.com']
-    }
-    merged_counts = {}
-    for d in top_sites_data:
-        raw_domain = d['domain'].lower()
-        mapped = False
-        for nice_name, variants in domain_mapping.items():
-            if raw_domain in variants or any(v in raw_domain for v in variants):
-                merged_counts[nice_name] = merged_counts.get(nice_name, 0) + d['count']
-                mapped = True
-                break
-        if not mapped:
-            merged_counts[raw_domain] = merged_counts.get(raw_domain, 0) + d['count']
-            
-    sorted_domains = sorted(merged_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+    sorted_domains = merge_top_domains(await get_top_domains())
     ts_str = ",".join([f"{clean_display_text(domain, DOMAIN_LIMIT, 'site')}:{count}" for domain, count in sorted_domains])
     
     vip_until = user.get('vip_until')

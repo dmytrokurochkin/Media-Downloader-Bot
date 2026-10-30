@@ -1,4 +1,3 @@
-import asyncio
 import html
 import logging
 import re
@@ -9,7 +8,7 @@ from datetime import datetime, timezone
 from aiogram.types import BufferedInputFile, InlineQueryResultArticle, InputTextMessageContent
 
 from core.config import ERROR_LOG_CHANNEL_ID
-from core.utils import delete_later
+from core.utils import schedule_delete
 from locales import get_text
 
 logger = logging.getLogger(__name__)
@@ -80,7 +79,7 @@ async def handle_media_error(e: Exception, bot, status_msg, url: str, user: dict
             else:
                 notice = None
             if notice is not None:
-                asyncio.create_task(delete_later(bot, notice.chat.id, notice.message_id, 30))
+                schedule_delete(bot, notice.chat.id, notice.message_id, 30)
         except Exception as notify_error:
             logger.debug("Could not notify user about download error: %s", notify_error)
 

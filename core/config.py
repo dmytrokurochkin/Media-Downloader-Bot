@@ -14,7 +14,6 @@ PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://127.0.0.1:8080/api")
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
 API_PORT = int(os.getenv("API_PORT", "8080"))
 ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
-PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "")
 ERROR_LOG_CHANNEL_ID = os.getenv("ERROR_LOG_CHANNEL_ID", "")
 if ERROR_LOG_CHANNEL_ID:
     try:

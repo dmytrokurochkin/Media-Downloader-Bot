@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import html
 import logging
@@ -18,13 +17,10 @@ from database import (
     get_or_create_user, get_user, apply_vip_purchase, apply_theme_purchase, get_user_payments,
 )
 from locales import get_text
-from core.utils import delete_later
+from core.utils import schedule_delete, text_matches
 
 payment_router = Router()
 logger = logging.getLogger(__name__)
-
-def text_matches(key):
-    return lambda msg: msg.text in [get_text(lang, key) for lang in ['uk', 'en', 'pl']]
 
 
 @dataclass
@@ -92,7 +88,7 @@ async def validate_purchase(payload: str, payer_id: int, amount: int, currency: 
 @payment_router.message(Command("vip"))
 @payment_router.message(text_matches('menu_vip'))
 async def vip_command(message: Message, state: FSMContext):
-    asyncio.create_task(delete_later(bot, message.chat.id, message.message_id, 60))
+    schedule_delete(bot, message.chat.id, message.message_id, 60)
     await state.clear()
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     lang = user['language_code']
@@ -120,7 +116,7 @@ async def vip_command(message: Message, state: FSMContext):
 
     builder.adjust(2)
     msg = await message.reply(get_text(lang, 'vip_menu'), reply_markup=builder.as_markup(), parse_mode="HTML")
-    asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 60))
+    schedule_delete(bot, msg.chat.id, msg.message_id, 60)
 
 @payment_router.callback_query(F.data.startswith("pay_stars_"))
 async def process_payment_selection(callback: CallbackQuery):
@@ -199,7 +195,7 @@ async def send_theme_invoice(message: Message, theme: str, user: dict):
     # Не продаємо тему вдруге: раніше за ту саму тему можна було заплатити кілька разів.
     if theme in (user.get('owned_themes') or 'standard').split(','):
         msg = await message.answer(get_text(lang, 'theme_already_owned'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        schedule_delete(bot, msg.chat.id, msg.message_id, 30)
         return
 
     title = f"{theme.capitalize()} Theme"
@@ -313,7 +309,15 @@ async def paysupport_command(message: Message, state: FSMContext):
     else:
         lines = get_text(lang, 'paysupport_no_payments')
 
+    from handlers.user import SupportState, support_ban_text
+    ban_text = support_ban_text(user)
+    if ban_text:
+        # Список платежів показуємо й тут: charge_id знадобиться для звернення до @PremiumBot.
+        await message.reply(get_text(lang, 'paysupport_no_support', payments=lines) + "\n\n" + ban_text)
+        return
+
     await message.reply(get_text(lang, 'paysupport_prompt', payments=lines))
     # Наступне повідомлення піде адміністрації тим самим шляхом, що й звичайна підтримка.
-    from handlers.user import SupportState
+    await state.clear()
     await state.set_state(SupportState.waiting_for_message)
+    await state.update_data(support_topic='payment')

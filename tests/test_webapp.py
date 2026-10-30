@@ -140,3 +140,22 @@ def test_clean_display_text_falls_back_for_empty_values():
     assert clean_display_text(None, 10) == "User"
     assert clean_display_text("\u200b\n", 10, "site") == "site"
     assert clean_display_text("  a   b  ", 10) == "a b"
+
+
+def test_merge_top_domains_matches_hosts_not_substrings():
+    from core.webapp import merge_top_domains, service_name
+
+    rows = [
+        {"domain": "www.youtube.com", "count": 3},
+        {"domain": "youtu.be", "count": 2},
+        {"domain": "music.youtube.com", "count": 4},
+        {"domain": "notyoutube.example", "count": 1},
+        {"domain": "user@www.github.com:443", "count": 1},
+    ]
+    merged = dict(merge_top_domains(rows))
+
+    assert merged["YouTube"] == 5
+    assert merged["YouTube Music"] == 4
+    assert merged["notyoutube.example"] == 1
+    assert merged["GitHub"] == 1
+    assert service_name("") == "unknown"

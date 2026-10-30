@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import html
 import logging
 import re
 import threading
@@ -7,7 +8,7 @@ import time
 import uuid
 from typing import Optional
 from pathlib import Path
-from core.utils import delete_later, temporary_download_session
+from core.utils import detect_language, extract_url, host_matches, is_forbidden_url, schedule_delete, temporary_download_session, text_matches, url_host
 
 from aiogram import Router, F, Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
@@ -15,10 +16,10 @@ from aiogram.types import (
     Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo,
     InputMediaAudio, InputMediaDocument, InlineQueryResultCachedVideo,
     InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent,
-    ReplyParameters
+    ReplyParameters, LinkPreviewOptions
 )
 
-from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, STORAGE_CHAT_ID, BOT_USERNAME
+from core.config import TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, STORAGE_CHAT_ID, BOT_USERNAME
 from core.loader import bot
 from database import get_or_create_user, get_daily_download_count, add_download_record, add_downloaded_bytes, get_active_ad
 from downloader import download_media
@@ -92,6 +93,11 @@ class ProgressTracker:
             except Exception:
                 pass
 
+# Сервіси з DRM, які yt-dlp не підтримує: краще одразу сказати, ніж качати й падати.
+_UNSUPPORTED_SERVICES = ('music.apple.com', 'deezer.com', 'deezer.page.link')
+_AUDIO_SERVICES = ('music.youtube.com', 'spotify.com', 'soundcloud.com')
+
+
 async def get_download_block_reason(user: dict, url: str) -> Optional[str]:
     """Ключ локалі з причиною відмови або None.
 
@@ -99,8 +105,10 @@ async def get_download_block_reason(user: dict, url: str) -> Optional[str]:
     редактор тегів у Mini App): раніше частина з них не перевіряла денний ліміт
     і заборонені посилання взагалі.
     """
-    if FORBIDDEN_URL_PATTERN.search(url):
+    if is_forbidden_url(url):
         return 'link_rejected'
+    if host_matches(url, *_UNSUPPORTED_SERVICES):
+        return 'service_not_supported'
     limits = TIER_LIMITS.get(user.get('tier', 'free'), TIER_LIMITS['free'])
     if await get_daily_download_count(user['telegram_id']) >= limits['daily']:
         return 'limit_reached'
@@ -127,63 +135,37 @@ async def _notify_download_blocked(message: Message, reason_key: str, lang: str,
             notice = message
         else:
             notice = await message.reply(text)
-        asyncio.create_task(delete_later(bot, notice.chat.id, notice.message_id, 30))
+        schedule_delete(bot, notice.chat.id, notice.message_id, 30)
     except Exception as e:
         logger.debug("Could not notify about blocked download: %s", e)
 
 
 @media_router.guest_message()
 async def guest_text_handler(message: Message):
+    # У guest_message from_user — це сам бот; справжній відправник — guest_bot_caller_user.
     caller = getattr(message, "guest_bot_caller_user", None) or message.from_user
     text = (message.text or message.caption or "").strip()
-    
-    bot_me = await bot.get_me()
-    bot_username = f"@{bot_me.username}" if bot_me.username else ""
-    if bot_username:
-        text = text.replace(bot_username, "").strip()
-        
-    url = None
-    match = URL_PATTERN.search(text)
-    if match:
-        url = match.group(0)
-    elif message.reply_to_message and (message.reply_to_message.text or message.reply_to_message.caption):
-        match = URL_PATTERN.search(message.reply_to_message.text or message.reply_to_message.caption)
-        if match:
-            url = match.group(0)
-            
+
+    bot_me = await bot.me()
+    if bot_me.username:
+        text = text.replace(f"@{bot_me.username}", " ").strip()
+
+    url = extract_url(text)
+    if not url and message.reply_to_message:
+        url = extract_url(message.reply_to_message.text or message.reply_to_message.caption)
     if not url:
         return
-        
-    user = await get_or_create_user(caller.id, getattr(caller, "username", ""), getattr(caller, "full_name", ""))
-    
-    if FORBIDDEN_URL_PATTERN.search(url) or caller.id in user_cooldowns:
-        if caller.id in user_cooldowns:
-            try:
-                result_article = InlineQueryResultArticle(
-                    id=str(uuid.uuid4()),
-                    title="⏳ Зачекайте!",
-                    description=get_text(user['language_code'], 'cooldown'),
-                    input_message_content=InputTextMessageContent(
-                        message_text=get_text(user['language_code'], 'cooldown')
-                    )
-                )
-                await message.answer_guest_query(result=result_article)
-            except Exception as e:
-                print(f"Guest cooldown error: {e}")
-        return
-        
-    daily_count = await get_daily_download_count(caller.id)
-    if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-        return
-        
+
+    user = await get_or_create_user(
+        caller.id, getattr(caller, "username", None) or "", getattr(caller, "full_name", None) or "",
+        language_code=detect_language(getattr(caller, "language_code", None)),
+    )
+    # Ліміти, cooldown і заборонені посилання перевіряє start_download — і закриває
+    # гостьовий запит поясненням (раніше відмова була мовчазною, запит «висів»).
     await process_url(message, url, user, is_guest_mode=True)
 
 class PdfState(StatesGroup):
     waiting_for_pdf_url = State()
-
-def text_matches(key: str):
-    from locales import get_text
-    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
 
 @media_router.message(text_matches('menu_save_pdf'))
 async def btn_save_pdf(message: Message, state: FSMContext):
@@ -191,28 +173,28 @@ async def btn_save_pdf(message: Message, state: FSMContext):
     tier = user.get('tier', 'free').lower()
     
     if tier not in ['pro', 'max']:
-        msg = await message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        msg = await message.reply(get_text(user['language_code'], 'pdf_pro_only'))
+        schedule_delete(bot, msg.chat.id, msg.message_id, 30)
         return
         
-    msg = await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
+    await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
     await state.set_state(PdfState.waiting_for_pdf_url)
 
 @media_router.message(PdfState.waiting_for_pdf_url)
 async def process_pdf_url(message: Message, state: FSMContext):
-    url = message.text.strip()
-    if not url.startswith('http'):
-        await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+    # message.text буває None (фото, стікер) — раніше .strip() на ньому валив хендлер.
+    url = extract_url(message.text)
+    if not url:
+        await message.reply(get_text(lang, 'pdf_invalid_url'))
         return
         
     await state.clear()
-    status_msg = await message.reply("⏳ Завантажую та генерую PDF-документ...")
+    status_msg = await message.reply(get_text(lang, 'pdf_generating'))
     
     try:
         from core.pdf_generator import generate_article_pdf
-        from core.utils import temporary_download_session
-        import time
-        from pathlib import Path
         
         session_dir = Path(f"downloads/pdf_{time.time_ns()}")
         
@@ -225,12 +207,13 @@ async def process_pdf_url(message: Message, state: FSMContext):
                 if not safe_title:
                     safe_title = "Article"
                     
-                from aiogram.types import FSInputFile
-                import html as html_lib
                 fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
                 # Назва статті й URL — дані зі сторінки/від користувача: без екранування
                 # `<` або `'` ламали parse_mode=HTML, і готовий PDF не відправлявся.
-                caption = f"📄 <b>{html_lib.escape(title[:900])}</b>\n\n🔗 <a href=\"{html_lib.escape(url, quote=True)}\">Джерело</a>"
+                caption = (
+                    f"📄 <b>{html.escape(title[:900])}</b>\n\n"
+                    f"🔗 <a href=\"{html.escape(url, quote=True)}\">{get_text(lang, 'pdf_source')}</a>"
+                )
                 
                 await bot.send_document(
                     chat_id=message.chat.id,
@@ -238,164 +221,119 @@ async def process_pdf_url(message: Message, state: FSMContext):
                     caption=caption,
                     parse_mode="HTML"
                 )
-                try:
+                with contextlib.suppress(TelegramAPIError):
                     await status_msg.delete()
-                except Exception:
-                    pass
             else:
                 raise Exception("PDF файл не згенеровано.")
     except Exception as e:
         from core.net_guard import UnsafeURLError
-        user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
         if isinstance(e, UnsafeURLError):
-            await status_msg.edit_text(get_text(user['language_code'], 'unsafe_url'))
+            await status_msg.edit_text(get_text(lang, 'unsafe_url'))
             return
-        import html as html_lib
-        err_str = str(e)
+        logger.warning("PDF generation failed for %s: %s", url, e)
+        err_str = str(e) or type(e).__name__
         if len(err_str) > 500:
             err_str = err_str[:500] + "..."
-        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{html_lib.escape(err_str)}")
+        await status_msg.edit_text(get_text(lang, 'pdf_error', error=html.escape(err_str)))
 
 @media_router.message(F.text)
-async def text_handler(message: Message):
-    bot_me = await bot.get_me()
-    username = f"@{bot_me.username}" if bot_me.username else ""
-    is_guest_mode = username in message.text if username else False
-    
-    url = None
-    match = URL_PATTERN.search(message.text)
-    if match:
-        url = match.group(0)
-    elif is_guest_mode and message.reply_to_message and message.reply_to_message.text:
-        match = URL_PATTERN.search(message.reply_to_message.text)
-        if match:
-            url = match.group(0)
-            
-    if url:
-        # Очищуємо URL, якщо користувач прикріпив тег бота без пробілу
-        if bot_me.username and url.endswith(f"@{bot_me.username}"):
-            url = url[:-len(f"@{bot_me.username}")]
-        
-        user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-        
-        if not is_guest_mode:
-            if FORBIDDEN_URL_PATTERN.search(url):
-                msg = await message.reply(get_text(user['language_code'], 'link_rejected'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-            if message.from_user.id in user_cooldowns:
-                msg = await message.reply(get_text(user['language_code'], 'cooldown'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-            daily_count = await get_daily_download_count(message.from_user.id)
-            if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-                msg = await message.reply(get_text(user['language_code'], 'limit_reached'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-        else:
-            if FORBIDDEN_URL_PATTERN.search(url) or message.from_user.id in user_cooldowns:
-                if message.from_user.id in user_cooldowns:
-                    try:
-                        msg = await message.reply(get_text(user['language_code'], 'cooldown'))
-                        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                    except Exception: pass
-                return
-            daily_count = await get_daily_download_count(message.from_user.id)
-            if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-                return
-                
-        await process_url(message, url, user, is_guest_mode=is_guest_mode)
+async def text_handler(message: Message, state: FSMContext):
+    bot_me = await bot.me()
+    mention = f"@{bot_me.username}" if bot_me.username else None
+    text = message.text
+    if mention:
+        # «@Bot https://...» або «https://...@Bot» — тег бота не частина посилання.
+        text = text.replace(mention, " ")
+
+    url = extract_url(text)
+    # У групі бота можна тегнути відповіддю на повідомлення з посиланням.
+    if not url and mention and mention in message.text and message.reply_to_message:
+        url = extract_url(message.reply_to_message.text or message.reply_to_message.caption)
+    if not url:
+        return
+
+    # Нове посилання — новий запит: незавершений діалог (підтримка, обкладинка, теги)
+    # скасовуємо, інакше наступне повідомлення чи завантаження пішло б не туди.
+    await state.clear()
+
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    # Тег бота в групі раніше вмикав «гостьовий режим»: файл ішов в особисті, а в групі
+    # була тиша (або нічого, якщо людина не запускала бота). Гостьовий режим тепер —
+    # лише справжні guest_message, а в групі бот відповідає в групу.
+    await process_url(message, url, user)
+
+
+_YT_HEIGHTS = {'1080p': 1080, '720p': 720, '480p': 480, '360p': 360}
+
+
+def youtube_format(quality: str) -> str:
+    """Рядок формату yt-dlp для якості (одне місце замість чотирьох копій)."""
+    if quality == 'audio':
+        return 'bestaudio/best'
+    height = _YT_HEIGHTS.get(quality)
+    if height is None:
+        return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+    return (
+        f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]'
+        f'/bestvideo[height<={height}]+bestaudio'
+        f'/best[height<={height}]/best'
+    )
+
+
+def quality_for_tier(tier: str) -> str:
+    return {'free': '720p', 'pro': '1080p'}.get(tier, 'best')
+
 
 async def process_url(message: Message, url: str, user: dict, is_guest_mode: bool = False, state=None):
-    if 'threads.com' in url:
-        url = url.replace('threads.com', 'threads.net')
-        
-    is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
-    
-    if is_audio_service:
+    if host_matches(url, *_AUDIO_SERVICES):
         await start_download(message, url, 'bestaudio/best', user, is_guest_mode=is_guest_mode, state=state)
-    elif 'youtube.com' in url or 'youtu.be' in url:
+    elif host_matches(url, 'youtube.com', 'youtu.be'):
         if is_guest_mode:
             from core.webapp_data import normalize_guest_quality
             quality = normalize_guest_quality(user.get('guest_yt_quality'), user.get('tier', 'free'))
-                
-            if quality == '1080p':
-                fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
-            elif quality == '720p':
-                fmt = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-            elif quality == '480p':
-                fmt = 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best'
-            elif quality == '360p':
-                fmt = 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best'
-            elif quality == 'audio':
-                fmt = 'bestaudio/best'
-            else:
-                fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            await start_download(message, url, fmt, user, is_guest_mode=True, state=state)
+            await start_download(message, url, youtube_format(quality), user, is_guest_mode=True, state=state)
         else:
+            lang = user['language_code']
+            # Перевіряємо одразу, щоб не показувати вибір якості, коли завантаження однаково
+            # не почнеться (остаточна перевірка — у start_download).
+            block_reason = 'cooldown' if user['telegram_id'] in user_cooldowns else await get_download_block_reason(user, url)
+            if block_reason:
+                await _notify_download_blocked(message, block_reason, lang, False, False)
+                return
             await message.reply(
-                get_text(user['language_code'], 'choose_yt_quality', url=url),
-                reply_markup=get_youtube_keyboard(url, user['language_code']),
-                disable_web_page_preview=True
+                get_text(lang, 'choose_yt_quality', url=html.escape(url)),
+                reply_markup=get_youtube_keyboard(url, lang),
+                link_preview_options=LinkPreviewOptions(is_disabled=True)
             )
     else:
-        tier = user.get('tier', 'free')
-        if tier == 'free':
-            fmt = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-        elif tier == 'pro':
-            fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
-        else:
-            fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        fmt = youtube_format(quality_for_tier(user.get('tier', 'free')))
         await start_download(message, url, fmt, user, is_guest_mode=is_guest_mode, state=state)
+
+_YT_ACTIONS = {'1080': '1080p', '720': '720p', '360': '360p', 'audio': 'audio', 'best': 'best'}
 
 @media_router.callback_query(F.data.startswith("yt_"))
 async def youtube_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    
-    action = callback.data.split('_')[1]
-    
-    text_parts = callback.message.text.split("🔗 ")
-    if len(text_parts) < 2:
-        await callback.message.edit_text("URL Error")
-        return
-    url = text_parts[1].strip()
-    
-    format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-    if action == '1080':
-        format_spec = 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best'
-    elif action == '720':
-        format_spec = 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best'
-    elif action == '360':
-        format_spec = 'bestvideo[ext=mp4][height<=360]+bestaudio[ext=m4a]/best[ext=mp4][height<=360]/best'
-    elif action == 'audio':
-        format_spec = 'bestaudio/best'
-        
-    user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
-    tier = user.get('tier', 'free')
-    
-    if tier == 'free' and action in ['1080', 'best']:
-        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-    if tier == 'pro' and action == 'best':
-        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    if callback.from_user.id in user_cooldowns:
-        msg = await callback.message.reply(get_text(user['language_code'], 'cooldown'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    daily_count = await get_daily_download_count(callback.from_user.id)
-    if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-        msg = await callback.message.reply(get_text(user['language_code'], 'limit_reached'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
-    await start_download(callback.message, url, format_spec, user, is_callback=True, state=state)
 
+    quality = _YT_ACTIONS.get(callback.data.removeprefix("yt_"))
+    message = callback.message
+    # Повідомлення, старші за 48 год, приходять як InaccessibleMessage — без тексту.
+    text = getattr(message, "text", None)
+    url = extract_url(text.split("🔗", 1)[1]) if text and "🔗" in text else None
+    if quality is None or not url:
+        return
+
+    user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+    lang = user['language_code']
+    tier = user.get('tier', 'free')
+
+    if (tier == 'free' and quality in ('1080p', 'best')) or (tier == 'pro' and quality == 'best'):
+        msg = await message.reply(get_text(lang, 'quality_limit'))
+        schedule_delete(bot, msg.chat.id, msg.message_id, 30)
+        return
+
+    await _safe_edit(message, get_text(lang, 'starting_download'))
+    await start_download(message, url, youtube_format(quality), user, is_callback=True, state=state)
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):
@@ -641,8 +579,7 @@ async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, u
 
 
 def extract_domain(url: str) -> str:
-    from urllib.parse import urlsplit
-    return (urlsplit(url).hostname or "unknown").lower()
+    return url_host(url) or "unknown"
 
 
 async def _take_tag_request(state) -> Optional[dict]:

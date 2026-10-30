@@ -1,10 +1,30 @@
 import aiosqlite
 import datetime
+import logging
+import time
 from pathlib import Path
 from typing import Optional, List
 
 DB_PATH = Path("database.db")
 _db_connection = None
+logger = logging.getLogger(__name__)
+
+# Лідерборди рахуються GROUP BY по всій таблиці downloads, а потрібні при кожному
+# /start і зміні мови (вони вшиті в URL Mini App) — тож результат кешуємо на хвилину.
+LEADERBOARD_TTL = 60
+_leaderboard_cache: dict = {}
+
+
+def _leaderboard_cached(key):
+    entry = _leaderboard_cache.get(key)
+    if entry and time.monotonic() - entry[0] < LEADERBOARD_TTL:
+        return entry[1]
+    return None
+
+
+def _leaderboard_store(key, rows: list) -> list:
+    _leaderboard_cache[key] = (time.monotonic(), rows)
+    return rows
 
 async def init_db_connection():
     global _db_connection
@@ -111,6 +131,8 @@ async def init_db():
     
     # Індекси для оптимізації швидкодії
     await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_daily ON downloads(telegram_id, timestamp);')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_domain ON downloads(success, domain);')
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_downloads_timestamp ON downloads(timestamp);')
     await db.execute('CREATE INDEX IF NOT EXISTS idx_user_badges ON user_badges(telegram_id);')
 
     # Журнал платежів Telegram Stars. charge_id UNIQUE — захист від подвійного
@@ -144,28 +166,18 @@ async def get_or_create_user(telegram_id: int, username: str, full_name: str, la
         user = await cursor.fetchone()
         
     if not user:
+        # ON CONFLICT: перші апдейти нового користувача (повідомлення + callback, гостьовий
+        # виклик) обробляються паралельно, і другий INSERT падав на UNIQUE посеред хендлера.
+        # last_active_at одразу, щоб retention-розсилка не вважала новачка «неактивним».
         await db.execute('''
-            INSERT INTO users (telegram_id, username, full_name, language_code, tier)
-            VALUES (?, ?, ?, ?, 'free')
-        ''', (telegram_id, username, full_name, language_code))
+            INSERT INTO users (telegram_id, username, full_name, language_code, tier, last_active_at)
+            VALUES (?, ?, ?, ?, 'free', ?)
+            ON CONFLICT(telegram_id) DO NOTHING
+        ''', (telegram_id, username, full_name, language_code, datetime.datetime.now(datetime.timezone.utc).isoformat()))
         await db.commit()
-        return {
-            "telegram_id": telegram_id,
-            "username": username,
-            "full_name": full_name,
-            "is_vip": False,
-            "vip_until": None,
-            "language_code": language_code,
-            "guest_yt_quality": "best",
-            "tier": "free",
-            "banned_bot_until": None,
-            "banned_support_until": None,
-            "is_anonymous": 0,
-            "theme": "standard",
-            "owned_themes": "standard",
-            "watermark_file_id": None,
-            "watermark_position": "bottom_right"
-        }
+        async with db.execute('SELECT * FROM users WHERE telegram_id = ?', (telegram_id,)) as cursor:
+            user = await cursor.fetchone()
+        return dict(user)
     
     user_dict = dict(user)
 
@@ -194,19 +206,14 @@ async def get_or_create_user(telegram_id: int, username: str, full_name: str, la
                 user_dict['tier'] = 'free'
             else:
                 user_dict['is_vip'] = 1
-        except Exception as e:
-            print(f"Помилка парсингу vip_until для {telegram_id}: {e}")
+        except (TypeError, ValueError) as e:
+            logger.warning("Bad vip_until for %s: %s", telegram_id, e)
         
     return user_dict
 
 async def set_user_language(telegram_id: int, language_code: str):
     global _db_connection
     await _db_connection.execute('UPDATE users SET language_code = ? WHERE telegram_id = ?', (language_code, telegram_id))
-    await _db_connection.commit()
-
-async def set_user_vip(telegram_id: int, is_vip: bool):
-    global _db_connection
-    await _db_connection.execute('UPDATE users SET is_vip = ? WHERE telegram_id = ?', (is_vip, telegram_id))
     await _db_connection.commit()
 
 def compute_vip_until(current_until: Optional[str], current_tier: Optional[str], tier: str, days: int, now: datetime.datetime) -> str:
@@ -255,7 +262,7 @@ async def get_daily_download_count(telegram_id: int) -> int:
     db = _db_connection
     async with db.execute('''
         SELECT COUNT(*) FROM downloads 
-        WHERE telegram_id = ? AND success = 1 AND DATE(timestamp) = DATE('now')
+        WHERE telegram_id = ? AND success = 1 AND timestamp >= DATE('now')
     ''', (telegram_id,)) as cursor:
         row = await cursor.fetchone()
         return row[0] if row else 0
@@ -292,23 +299,34 @@ async def get_users_stats_by_tier() -> dict:
         
     return stats
 
-async def get_top_domains() -> List[dict]:
-    """Повертає лідерборд найпопулярніших ресурсів"""
+async def get_top_domains(limit: int = 50) -> List[dict]:
+    """Повертає лідерборд найпопулярніших ресурсів.
+
+    Сирих доменів береться більше, ніж показується: youtube.com, m.youtube.com і youtu.be
+    потім зливаються в один сервіс (core/webapp.merge_top_domains), і з LIMIT 10
+    до злиття менші сервіси випадали з топу.
+    """
     global _db_connection
+    cached = _leaderboard_cached(('domains', limit))
+    if cached is not None:
+        return cached
     async with _db_connection.execute('''
         SELECT domain, COUNT(*) as count 
         FROM downloads 
         WHERE success = 1 
         GROUP BY domain 
         ORDER BY count DESC 
-        LIMIT 10
-    ''') as cursor:
+        LIMIT ?
+    ''', (limit,)) as cursor:
         rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+        return _leaderboard_store(('domains', limit), [dict(r) for r in rows])
 
 async def get_top_users(limit: int = 10) -> List[dict]:
     """Повертає лідерборд користувачів за кількістю завантажень"""
     global _db_connection
+    cached = _leaderboard_cached(('users', limit))
+    if cached is not None:
+        return cached
     async with _db_connection.execute('''
         SELECT u.telegram_id, u.full_name, u.username, COUNT(d.id) as count
         FROM users u
@@ -319,7 +337,7 @@ async def get_top_users(limit: int = 10) -> List[dict]:
         LIMIT ?
     ''', (limit,)) as cursor:
         rows = await cursor.fetchall()
-        return [dict(r) for r in rows]
+        return _leaderboard_store(('users', limit), [dict(r) for r in rows])
 
 async def set_guest_yt_quality(telegram_id: int, quality: str):
     global _db_connection
@@ -334,6 +352,8 @@ async def update_user_settings(telegram_id: int, language_code: str, guest_yt_qu
         WHERE telegram_id = ?
     ''', (language_code, guest_yt_quality, is_anonymous, theme, watermark_position, telegram_id))
     await _db_connection.commit()
+    # Хто щойно увімкнув анонімність, має зникнути з лідерборду одразу, а не через хвилину.
+    _leaderboard_cache.clear()
 
 async def set_watermark_file_id(telegram_id: int, file_id: str):
     global _db_connection
@@ -477,7 +497,6 @@ async def get_user_stats(telegram_id: int) -> Optional[dict]:
     
     return profile
 
-import time
 _ad_cache = {"text": None, "timestamp": 0}
 CACHE_TTL = 300 # 5 хвилин кешу для реклами
 
@@ -531,15 +550,34 @@ async def get_inactive_users(days_inactive: int = 14) -> List[dict]:
     
     threshold_date = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_inactive)).isoformat()
     
+    # datetime() з обох боків: last_active_at буває і 'YYYY-MM-DD HH:MM:SS' (CURRENT_TIMESTAMP
+    # з міграції), і ISO з 'T' та зсувом — рядкове порівняння цих форматів хибило в межах доби.
+    # Забанених не чіпаємо: подарунок і повідомлення їм ні до чого.
     async with _db_connection.execute('''
-        SELECT telegram_id, tier, retention_promo_received
+        SELECT telegram_id, tier, language_code, retention_promo_received
         FROM users
-        WHERE (last_active_at < ? OR last_active_at IS NULL)
+        WHERE (last_active_at IS NULL OR datetime(last_active_at) < datetime(?))
         AND retention_promo_received = 0
         AND tier = 'free'
+        AND (banned_bot_until IS NULL OR datetime(banned_bot_until) < datetime('now'))
     ''', (threshold_date,)) as cursor:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
+
+async def purge_old_download_urls(days: int = 30) -> int:
+    """Стирає URL і назви старих завантажень, лишаючи агрегати (домен, розмір, дату).
+
+    Повні посилання — це історія переглядів користувача; для лімітів і лідербордів
+    вони не потрібні, тож довше ніж `days` днів їх не зберігаємо.
+    """
+    global _db_connection
+    cursor = await _db_connection.execute('''
+        UPDATE downloads SET url = NULL, page_title = NULL
+        WHERE url IS NOT NULL AND timestamp < datetime('now', ?)
+    ''', (f'-{int(days)} days',))
+    await _db_connection.commit()
+    return cursor.rowcount
+
 
 async def mark_retention_promo_received(telegram_id: int):
     """Позначає, що користувач отримав промо після неактивності"""

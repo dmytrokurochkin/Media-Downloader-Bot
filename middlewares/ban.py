@@ -1,18 +1,23 @@
+import logging
 from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, InlineQuery
 from typing import Callable, Dict, Any, Awaitable
+from cachetools import TTLCache
 from database import get_or_create_user, update_last_active
 from locales import get_text
-from core.utils import get_event_user
+from core.utils import detect_language, get_event_user
 import datetime
 
-# Кеш для кулдауну повідомлень про бан (user_id -> datetime)
-BANNED_NOTIFIED_CACHE = {}
-BAN_NOTIFICATION_COOLDOWN = datetime.timedelta(hours=1) # 1 година кулдауну
+logger = logging.getLogger(__name__)
+
+# Кеші з TTL замість звичайних dict: ті росли з кожним новим користувачем і ніколи
+# не чистились. Запис живе рівно стільки, скільки триває відповідний кулдаун.
+BAN_NOTIFICATION_COOLDOWN = datetime.timedelta(hours=1)
+BANNED_NOTIFIED_CACHE = TTLCache(maxsize=10_000, ttl=BAN_NOTIFICATION_COOLDOWN.total_seconds())
 
 # Кеш для зменшення навантаження на БД при оновленні last_active_at
-LAST_ACTIVE_CACHE = {}
 ACTIVE_UPDATE_COOLDOWN = datetime.timedelta(minutes=5)
+LAST_ACTIVE_CACHE = TTLCache(maxsize=100_000, ttl=ACTIVE_UPDATE_COOLDOWN.total_seconds())
 
 class BanCheckMiddleware(BaseMiddleware):
     async def __call__(
@@ -40,69 +45,62 @@ class BanCheckMiddleware(BaseMiddleware):
             # Full name might be empty
             full_name = user.full_name if user.full_name else ""
             username = user.username if user.username else ""
-            db_user = await get_or_create_user(user.id, username, full_name)
+            # Мова нового користувача — з його Telegram-клієнта, а не завжди англійська.
+            language = detect_language(getattr(user, "language_code", None))
+            db_user = await get_or_create_user(user.id, username, full_name, language)
             
             now_dt = datetime.datetime.now(datetime.timezone.utc)
             
             # Update user's last activity timestamp (із захистом від спаму запитів у БД)
-            last_active = LAST_ACTIVE_CACHE.get(user.id)
-            if not last_active or (now_dt - last_active) > ACTIVE_UPDATE_COOLDOWN:
+            if user.id not in LAST_ACTIVE_CACHE:
                 await update_last_active(user.id)
                 LAST_ACTIVE_CACHE[user.id] = now_dt
             
             # Check bot ban
+            ban_until_dt = None
             if db_user.get('banned_bot_until'):
                 from core.utils import parse_db_date
-                try:
-                    ban_until_dt = parse_db_date(db_user['banned_bot_until'])
-                        
-                    if now_dt < ban_until_dt:
-                        # User is banned.
-                        # Stop propagation, but only notify if cooldown has passed
-                        last_notified = BANNED_NOTIFIED_CACHE.get(user.id)
-                        if last_notified and now_dt - last_notified < BAN_NOTIFICATION_COOLDOWN:
-                            return # Ignore silently
+                ban_until_dt = parse_db_date(db_user['banned_bot_until'])  # None, якщо дата бита
 
-                        # Calculate formatted string to show
-                        formatted_date = ban_until_dt.strftime("%Y-%m-%d %H:%M")
-                        if ban_until_dt.year == 9999:
-                            formatted_date = "Назавжди / Forever"
-                            
-                        ban_msg = get_text(db_user['language_code'], 'banned_bot', until=formatted_date)
-                        
-                        if is_guest:
-                            # У гостьовому режимі звичайна відповідь неможлива — лише answer_guest_query.
-                            from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
-                            import uuid
-                            res = InlineQueryResultArticle(
-                                id=str(uuid.uuid4()),
-                                title="⛔️",
-                                description=ban_msg.replace('<b>', '').replace('</b>', '')[:200],
-                                input_message_content=InputTextMessageContent(message_text=ban_msg, parse_mode="HTML")
-                            )
-                            await event.answer_guest_query(result=res)
-                        elif isinstance(event, Message):
-                            await event.reply(ban_msg, parse_mode="HTML")
-                        elif isinstance(event, CallbackQuery):
-                            clean_msg = ban_msg.replace('<b>', '').replace('</b>', '')
-                            await event.answer(clean_msg, show_alert=True)
-                        elif isinstance(event, InlineQuery):
-                            from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
-                            import uuid
-                            res = InlineQueryResultArticle(
-                                id=str(uuid.uuid4()),
-                                title="⛔️ Доступ заборонено",
-                                description="Ваш акаунт заблоковано.",
-                                input_message_content=InputTextMessageContent(message_text=ban_msg, parse_mode="HTML")
-                            )
-                            await event.answer([res])
-                            
-                        # Update cache
-                        BANNED_NOTIFIED_CACHE[user.id] = now_dt
-                        
-                        # Stop propagation
-                        return
-                except Exception as e:
-                    print(f"Помилка перевірки бану для {user.id}: {e}")
-                    
+            if ban_until_dt and now_dt < ban_until_dt:
+                # Користувач забанений: апдейт далі не йде НІКОЛИ. Раніше збій відправки
+                # сповіщення (застарілий callback, бот заблокований) ловився спільним
+                # except, і хендлер виконувався для забаненого.
+                if user.id not in BANNED_NOTIFIED_CACHE:
+                    BANNED_NOTIFIED_CACHE[user.id] = now_dt
+                    try:
+                        await self._notify_banned(event, db_user, ban_until_dt, is_guest)
+                    except Exception as e:
+                        logger.info("Could not notify banned user %s: %s", user.id, e)
+                return
+
         return await handler(event, data)
+
+    @staticmethod
+    async def _notify_banned(event, db_user: dict, ban_until_dt: datetime.datetime, is_guest: bool) -> None:
+        lang = db_user['language_code']
+        formatted_date = ban_until_dt.strftime("%Y-%m-%d %H:%M UTC")
+        if ban_until_dt.year == 9999:
+            formatted_date = get_text(lang, 'forever_label')
+
+        ban_msg = get_text(lang, 'banned_bot', until=formatted_date)
+        plain_ban_msg = ban_msg.replace('<b>', '').replace('</b>', '')
+
+        if is_guest or isinstance(event, InlineQuery):
+            from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
+            import uuid
+            res = InlineQueryResultArticle(
+                id=str(uuid.uuid4()),
+                title="⛔️",
+                description=plain_ban_msg[:200],
+                input_message_content=InputTextMessageContent(message_text=ban_msg, parse_mode="HTML")
+            )
+            if is_guest:
+                # У гостьовому режимі звичайна відповідь неможлива — лише answer_guest_query.
+                await event.answer_guest_query(result=res)
+            else:
+                await event.answer([res], cache_time=0, is_personal=True)
+        elif isinstance(event, Message):
+            await event.reply(ban_msg, parse_mode="HTML")
+        elif isinstance(event, CallbackQuery):
+            await event.answer(plain_ban_msg[:200], show_alert=True)

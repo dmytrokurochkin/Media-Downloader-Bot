@@ -30,11 +30,14 @@ def _make_callback(user_id, username="u", full_name="U"):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_middleware_caches(monkeypatch):
-    # These caches are plain module-level dicts in middlewares/ban.py; reset them
-    # for every test so bans/notifications from one test can't leak into another.
-    monkeypatch.setattr(ban_module, "BANNED_NOTIFIED_CACHE", {})
-    monkeypatch.setattr(ban_module, "LAST_ACTIVE_CACHE", {})
+def _isolated_middleware_caches():
+    # These caches are module-level TTLCaches in middlewares/ban.py; clear them around
+    # every test so bans/notifications from one test can't leak into another.
+    ban_module.BANNED_NOTIFIED_CACHE.clear()
+    ban_module.LAST_ACTIVE_CACHE.clear()
+    yield
+    ban_module.BANNED_NOTIFIED_CACHE.clear()
+    ban_module.LAST_ACTIVE_CACHE.clear()
 
 
 async def test_non_banned_user_passes_through(db):
@@ -144,3 +147,32 @@ async def test_support_ban_alone_does_not_block_bot_usage(db):
     result = await mw(handler, _make_message(111), {})
     assert result == "ok"
     handler.assert_awaited_once()
+
+
+async def test_banned_user_is_blocked_even_if_notification_fails(db, monkeypatch):
+    # Застарілий callback / заблокований бот: збій сповіщення не повинен пропускати апдейт далі.
+    await db.get_or_create_user(111, "u", "U", "en")
+    await db.ban_user_bot(111, days=1)
+    monkeypatch.setattr(_FakeCallbackQuery, "answer", AsyncMock(side_effect=RuntimeError("query is too old")))
+
+    mw = BanCheckMiddleware()
+    handler = AsyncMock(return_value="ok")
+
+    assert await mw(handler, _make_callback(111), {}) is None
+    handler.assert_not_awaited()
+
+
+async def test_new_user_gets_language_of_telegram_client(db):
+    message = _FakeMessage.model_construct(
+        from_user=SimpleNamespace(id=333, username="p", full_name="P", language_code="pl-PL")
+    )
+    await BanCheckMiddleware()(AsyncMock(), message, {})
+
+    assert (await db.get_user(333))["language_code"] == "pl"
+
+
+def test_middleware_caches_are_bounded_ttl_caches():
+    # Звичайні dict росли з кожним новим користувачем і ніколи не чистились.
+    from cachetools import TTLCache
+    assert isinstance(ban_module.BANNED_NOTIFIED_CACHE, TTLCache)
+    assert isinstance(ban_module.LAST_ACTIVE_CACHE, TTLCache)
