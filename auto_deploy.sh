@@ -88,6 +88,11 @@ $SUDO apt-get install -y build-essential cmake gperf zlib1g-dev libssl-dev git p
 # so an unknown package name here can't abort the whole apt-get transaction under set -e.
 $SUDO apt-get install -y libgdk-pixbuf-2.0-0 || $SUDO apt-get install -y libgdk-pixbuf2.0-0 || \
     echo -e "${BLUE}Warning: could not install a gdk-pixbuf package under either known name. PDF export (weasyprint) may not work.${NC}"
+# HarfBuzz-Subset (вбудовування шрифтів у PDF): weasyprint уже попереджає, що наступні
+# версії без нього не працюватимуть. Окремою командою, щоб стара система без пакета не
+# зупинила весь скрипт під set -e.
+$SUDO apt-get install -y libharfbuzz-subset0 || \
+    echo -e "${BLUE}Warning: libharfbuzz-subset0 not installed. Future weasyprint versions will need it for PDF export.${NC}"
 
 # JS-рантайм для yt-dlp. YouTube віддає формати лише після розв'язання JS-челенджу
 # (пакет yt-dlp-ejs), і yt-dlp запускає його через Deno >= 2.3. Node з apt для цього
