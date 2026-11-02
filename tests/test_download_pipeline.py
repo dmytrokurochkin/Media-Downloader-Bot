@@ -77,12 +77,12 @@ async def test_download_media_enforces_actual_size(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("messages,expected", [
-    (["ERROR: [youtube] x: Sign in to confirm your age. This video may be inappropriate"], "18+"),
-    (["ERROR: [youtube] x: Private video. Sign in if you've been granted access"], "приватне"),
     (["ERROR: [generic] Unsupported URL: https://example.com"], "Unsupported URL"),
     ([], "Не вдалося"),
 ])
 def test_describe_ytdlp_failure(messages, expected):
+    # 18+, приватне й «не бот» сюди більше не доходять: це AuthRequiredError з
+    # локалізованим текстом (див. test_cookies.py).
     assert expected in downloader.describe_ytdlp_failure(messages)
 
 

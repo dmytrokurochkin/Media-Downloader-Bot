@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 
 # core/loader.py створює Bot(token=...) уже при імпорті хендлерів. Заглушка ставиться ДО
@@ -33,3 +34,13 @@ async def db(tmp_path, monkeypatch):
     yield database
 
     await database.close_db_connection()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cookies(tmp_path, monkeypatch):
+    """Жоден тест не читає й не пише справжній cookies.txt розробника, а стан сповіщень
+    про куки не протікає між тестами."""
+    from core import cookie_monitor, cookies
+    monkeypatch.setattr(cookies, "COOKIES_FILE", tmp_path / "cookies.txt")
+    monkeypatch.setattr(cookie_monitor, "_last_alert", {})
+    monkeypatch.setattr(cookie_monitor, "_last_ok_write", {})

@@ -113,6 +113,17 @@ sudo journalctl -u tg-media-bot -f
 
 Run `./auto_deploy.sh` again to apply updates (it restarts the services). `UPDATE_BOT_API=1 ./auto_deploy.sh` also rebuilds the Telegram Bot API server from the latest sources. The database is backed up daily to `backups/` (the 14 newest copies are kept) — copy them off the server as well.
 
+## 🍪 Cookies (18+, login-only content)
+
+YouTube 18+, Instagram, Facebook and TikTok often require a signed-in account. The bot uses cookies of a **dedicated account** per service:
+
+1. Create a separate account for the bot (not your personal one) — services may restrict it for automated downloads. For 18+ content it must be an adult, age-verified account.
+2. Open a private browser window and sign in. For YouTube, open `youtube.com/robots.txt` in the same tab.
+3. Export the cookies with the «Get cookies.txt LOCALLY» extension (Netscape format), then close the private window and never reopen that session — otherwise the service rotates the cookies and the exported ones stop working.
+4. Send the file to the bot in a private chat with the caption `/cookies` (admins only). The bot keeps only the cookies of supported services, deletes the message with the file and shows what it saved. `/cookies` without a file shows the status and the same instructions.
+
+Downloaders get a private copy of the cookies for each download, so parallel downloads can no longer corrupt `cookies.txt`. When a service stops accepting the cookies, admins get a message with what to do. If services block the server's IP («confirm you're not a bot»), set `DOWNLOAD_PROXY` in `.env`.
+
 ## 🔒 Security notes
 
 - The local Bot API server runs as a separate `tgbotapi` user and listens on `127.0.0.1` only. In `--local` mode it can read any local file for any bot token, so never expose port `8081`.

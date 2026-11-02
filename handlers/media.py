@@ -597,6 +597,18 @@ async def _take_tag_request(state) -> Optional[dict]:
     return data
 
 
+async def _report_cookie_state(meta: dict, url: str) -> None:
+    """Успіх із куками — у статус; збій кук, який пережив запасний варіант без них, — адміну."""
+    from core import cookie_monitor
+    try:
+        if meta.get('cookie_problem') is not None:
+            await cookie_monitor.report_problem(bot, meta['cookie_problem'], url)
+        elif meta.get('cookies_used'):
+            await cookie_monitor.report_success(meta['cookies_used'])
+    except Exception:
+        logger.exception("Could not record cookie state for %s", url)
+
+
 async def _record_download_stats(user_id: int, url: str, title: str, file_size: int, success: bool) -> None:
     await add_download_record(user_id, url, extract_domain(url), title, file_size, success)
     if success:
@@ -680,6 +692,7 @@ async def start_download(message: Message, url: str, format_spec: str, user: dic
                 tracker_update = tracker.update if tracker else None
                 filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir, meta=download_meta)
 
+            await _report_cookie_state(download_meta, url)
             await _safe_edit(status_msg, get_text(lang, 'downloaded_sending'))
 
             if isinstance(filepath, list):

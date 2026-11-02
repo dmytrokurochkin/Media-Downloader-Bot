@@ -237,3 +237,20 @@ async def test_set_yt_quality_ignores_unknown_quality(db, monkeypatch):
 
     assert (await db.get_user(111))["guest_yt_quality"] == "best"
     answer.assert_awaited_once()
+
+
+async def test_command_in_document_caption_cancels_support_input(db, monkeypatch):
+    # Адмін у стані «звернення» надсилає файл кук із підписом /cookies — це команда,
+    # а не звернення: файл не повинен піти іншим адмінам.
+    await db.get_or_create_user(111, "u", "U", "en")
+    monkeypatch.setattr(_FakeMessage, "reply", AsyncMock(return_value=SimpleNamespace(chat=SimpleNamespace(id=111), message_id=9)))
+    bot = _fake_bot()
+    state = _make_fsm_context(111)
+    await state.set_state(SupportState.waiting_for_message)
+
+    message = _make_message(111, text=None, caption="/cookies", document=SimpleNamespace(file_id="F"))
+    await process_support_message(message, state, bot)
+
+    bot.send_message.assert_not_awaited()
+    bot.copy_message.assert_not_awaited()
+    assert await state.get_state() is None

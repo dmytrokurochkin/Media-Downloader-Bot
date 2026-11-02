@@ -113,6 +113,17 @@ sudo journalctl -u tg-media-bot -f
 
 Aby zastosować aktualizacje, uruchom `./auto_deploy.sh` ponownie (zrestartuje usługi). `UPDATE_BOT_API=1 ./auto_deploy.sh` dodatkowo przebuduje Telegram Bot API Server z najnowszych źródeł. Baza jest codziennie kopiowana do `backups/` (zostaje 14 najnowszych kopii) — kopiuj je także poza serwer.
 
+## 🍪 Ciasteczka (18+ i treści tylko po zalogowaniu)
+
+YouTube 18+, Instagram, Facebook i TikTok często wymagają zalogowania. Bot używa ciasteczek **osobnego konta** dla każdego serwisu:
+
+1. Załóż dla bota osobne konto (nie prywatne): serwisy mogą je ograniczyć za automatyczne pobieranie. Dla treści 18+ konto musi być pełnoletnie i z potwierdzonym wiekiem.
+2. Otwórz prywatne okno przeglądarki i zaloguj się. Dla YouTube w tej samej karcie otwórz `youtube.com/robots.txt`.
+3. Wyeksportuj ciasteczka rozszerzeniem «Get cookies.txt LOCALLY» (format Netscape), zamknij prywatne okno i nie otwieraj więcej tej sesji — inaczej serwis odświeży ciasteczka, a wyeksportowane przestaną działać.
+4. Wyślij plik botowi na prywatnym czacie z podpisem `/cookies` (tylko administratorzy). Bot zachowa tylko ciasteczka obsługiwanych serwisów, usunie wiadomość z plikiem i pokaże, co zapisał. `/cookies` bez pliku pokazuje stan i tę samą instrukcję.
+
+Programy pobierające dostają osobną kopię ciasteczek przy każdym pobieraniu, więc równoległe pobierania nie psują już `cookies.txt`. Gdy serwis przestaje akceptować ciasteczka, administratorzy dostają wiadomość z poradą. Jeśli serwisy blokują IP serwera («potwierdź, że nie jesteś botem»), ustaw `DOWNLOAD_PROXY` w `.env`.
+
 ## 🔒 Bezpieczeństwo
 
 - Lokalny Bot API Server działa jako osobny użytkownik `tgbotapi` i nasłuchuje tylko na `127.0.0.1`. W trybie `--local` może odczytać dowolny lokalny plik dla dowolnego tokena, więc nigdy nie wystawiaj portu `8081` na zewnątrz.

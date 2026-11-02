@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Union, List, Optional
 from urllib.parse import urlsplit
 import yt_dlp
-from core.config import TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, YTDLP_COOKIES_FROM_BROWSER
+from core.config import TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, YTDLP_COOKIES_FROM_BROWSER, DOWNLOAD_PROXY
+from core import cookies
 from core.net_guard import FetchError, ResponseTooLargeError, ensure_public_url, safe_download, safe_get
 from core.utils import host_matches, run_command
 
@@ -26,7 +27,7 @@ YTDLP_SOCKET_TIMEOUT = 30
 FFMPEG_TIMEOUT = 30 * 60
 
 # Службові та недокачані файли, які не можна віддавати користувачу як «результат».
-_LEFTOVER_SUFFIXES = {'.part', '.ytdl', '.temp', '.tmp', '.json', '.description', '.spotdl', '.lrc', '.m3u', '.m3u8'}
+_LEFTOVER_SUFFIXES = {'.part', '.ytdl', '.temp', '.tmp', '.json', '.description', '.spotdl', '.lrc', '.m3u', '.m3u8', '.txt'}
 # Проміжні потоки yt-dlp, що лишаються, якщо злиття відео+аудіо не вдалося (`title.f137.mp4`).
 _INTERMEDIATE_STREAM_RE = re.compile(r'\.f\d+(-\d+)?$')
 _IMAGE_SUFFIXES = {'.jpg', '.jpeg', '.png', '.webp'}
@@ -48,6 +49,20 @@ class DownloadFailedError(Exception):
     """Завантаження не вдалося; текст — справжня причина від бекенду."""
 
 
+class AuthRequiredError(DownloadFailedError):
+    """Сервіс не віддав контент без входу: 18+, приватне, перевірка «не бот», мертві куки.
+
+    `kind` — результат cookies.classify_auth_problem, `had_cookies` — чи були в бота куки
+    цього сервісу. Від цих двох полів залежить і текст користувачу, і порада адміну.
+    """
+
+    def __init__(self, detail: str, *, service: Optional[str], kind: str, had_cookies: bool):
+        super().__init__(detail)
+        self.service = service
+        self.kind = kind
+        self.had_cookies = had_cookies
+
+
 def is_leftover_file(path: Path) -> bool:
     if path.suffix.lower() in _LEFTOVER_SUFFIXES:
         return True
@@ -65,6 +80,10 @@ def collect_media_files(session_dir: Path, *, recursive: bool = False, keep_imag
     files = []
     for path in candidates:
         if not path.is_file() or is_leftover_file(path):
+            continue
+        # Приховане — службове (зокрема `.cookies/` з копією кук): його не можна
+        # прийняти за результат і надіслати користувачу.
+        if any(part.startswith('.') for part in path.relative_to(session_dir).parts):
             continue
         if not keep_images and path.suffix.lower() in _IMAGE_SUFFIXES:
             continue
@@ -126,12 +145,14 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
 
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", NO_COLOR="1", TERM="dumb")
     from core.config import FFMPEG_WIN_PATH
-    ffmpeg_args = ["--ffmpeg", FFMPEG_WIN_PATH] if Path(FFMPEG_WIN_PATH).exists() else []
+    extra_args = ["--ffmpeg", FFMPEG_WIN_PATH] if Path(FFMPEG_WIN_PATH).exists() else []
+    if DOWNLOAD_PROXY:
+        extra_args += ["--proxy", DOWNLOAD_PROXY]
 
     # Спершу `spotdl save`: отримуємо список треків, щоб застосувати ліміт плейлиста тарифу.
     save_file = session_dir / "tracks.spotdl"
     # `--` перед URL: рядок із Mini App, що починається з `-`, інакше став би опцією spotdl.
-    save_cmd = [sys.executable, "-m", "spotdl", "save", "--save-file", str(save_file), *ffmpeg_args, "--", url]
+    save_cmd = [sys.executable, "-m", "spotdl", "save", "--save-file", str(save_file), *extra_args, "--", url]
     code, _, stderr = await run_command(save_cmd, timeout=SUBPROCESS_TIMEOUT, name="spotdl", env=env)
     if code != 0:
         raise DownloadFailedError(_short_error("spotdl", stderr))
@@ -148,7 +169,7 @@ async def download_with_spotdl(url: str, session_dir: Path, progress_callback=No
         "--output", str(session_dir / template),
         "--audio", "youtube-music", "youtube",
         "--log-level", "ERROR",
-        *ffmpeg_args,
+        *extra_args,
     ]
     code, _, stderr = await run_command(cmd, timeout=SUBPROCESS_TIMEOUT, name="spotdl", env=env)
 
@@ -204,6 +225,7 @@ class _YtdlpLogger:
 
     def __init__(self):
         self.errors: List[str] = []
+        self.warnings: List[str] = []
         self.size_exceeded = False
 
     def debug(self, msg):
@@ -214,6 +236,8 @@ class _YtdlpLogger:
         self.debug(msg)
 
     def warning(self, msg):
+        # Саме попередженням yt-dlp повідомляє, що куки YouTube більше не дійсні.
+        self.warnings.append(msg)
         logger.warning("yt-dlp: %s", msg)
 
     def error(self, msg):
@@ -223,32 +247,35 @@ class _YtdlpLogger:
 
 def describe_ytdlp_failure(messages: List[str]) -> str:
     """Перетворює помилки yt-dlp на зрозуміле пояснення для користувача."""
-    text = " ".join(messages)
-    lowered = text.lower()
-    if "confirm your age" in lowered or "age-restricted" in lowered or "age restricted" in lowered:
-        return "Цей контент має вікові обмеження (18+). YouTube блокує його завантаження для ботів. Додайте файл cookies.txt для автентифікації."
-    if "private video" in lowered or "this video is private" in lowered:
-        return "Це приватне відео — завантажити його неможливо."
-    if "sign in to confirm you" in lowered or "not a bot" in lowered:
-        return "YouTube вимагає підтвердити, що це не бот. Оновіть cookies.txt на сервері."
     if messages:
         return re.sub(r'^ERROR:\s*', '', messages[-1])[:500]
     return "Не вдалося завантажити медіа. Можливо, відео видалено або воно приватне."
 
 
-def _cookie_configs() -> List[dict]:
-    """Варіанти cookies по черзі: cookies.txt -> браузер (якщо задано в .env) -> без cookies.
+def _cookie_configs(url: str, session_dir: Path) -> List[tuple]:
+    """Варіанти cookies по черзі: куки бота -> браузер (якщо задано в .env) -> без cookies.
 
-    Раніше перебирались ще й шість браузерів підряд: на сервері їх немає, а кожен
-    збій завантаження повторювався до восьми разів.
+    Повертає пари (опції yt-dlp, чи це куки бота). yt-dlp отримує КОПІЮ кук сервісу в
+    теці сесії, а не cookies.txt: він перезаписує переданий файл після кожного запуску,
+    і паралельні завантаження псували спільний файл (див. core/cookies.py).
     """
     configs = []
-    if Path('cookies.txt').exists():
-        configs.append({'cookiefile': 'cookies.txt'})
+    cookie_copy = cookies.cookiefile_for(url, session_dir)
+    if cookie_copy is not None:
+        configs.append(({'cookiefile': str(cookie_copy)}, True))
     if YTDLP_COOKIES_FROM_BROWSER:
-        configs.append({'cookiesfrombrowser': (YTDLP_COOKIES_FROM_BROWSER, None, None, None)})
-    configs.append({})
+        configs.append(({'cookiesfrombrowser': (YTDLP_COOKIES_FROM_BROWSER, None, None, None)}, False))
+    configs.append(({}, False))
     return configs
+
+
+def auth_error_from(messages: List[str], url: str, had_cookies: bool) -> Optional[AuthRequiredError]:
+    kind = cookies.classify_auth_problem(messages)
+    if kind is None:
+        return None
+    detail = next((m for m in reversed(messages) if m), kind)
+    return AuthRequiredError(re.sub(r'^ERROR:\s*', '', str(detail))[:500], service=cookies.service_for_url(url),
+                             kind=kind, had_cookies=had_cookies)
 
 
 def _make_progress_hook(progress_callback, loop, cancel_event: Optional[threading.Event]):
@@ -349,6 +376,8 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
     }
     if playlist_limit < 9999:
         opts['playlistend'] = playlist_limit
+    if DOWNLOAD_PROXY:
+        opts['proxy'] = DOWNLOAD_PROXY
 
     from core.config import FFMPEG_WIN_PATH
     if Path(FFMPEG_WIN_PATH).exists():
@@ -369,7 +398,11 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
         ]
 
     last_errors: List[str] = []
-    for config in _cookie_configs():
+    all_messages: List[str] = []
+    cookie_problem: Optional[AuthRequiredError] = None
+    had_cookies = False
+    for config, with_cookies in _cookie_configs(url, session_dir):
+        had_cookies = had_cookies or with_cookies
         ytdlp_logger = _YtdlpLogger()
         current_opts = {**opts, **config, 'logger': ytdlp_logger}
         info = None
@@ -401,17 +434,38 @@ def download_media_sync(url: str, format_spec: str, progress_callback, loop, ses
             if is_audio and not any(f.suffix.lower() == '.mp3' for f in downloaded_files):
                 raise DownloadFailedError("Не вдалося конвертувати аудіо в mp3. Перевірте, що ffmpeg встановлений і FFMPEG_PATH у .env вказує на існуючий файл.")
 
+            if meta is not None:
+                problem = cookie_problem
+                if with_cookies and problem is None:
+                    # Публічне відео качається і з мертвими куками — yt-dlp лише попереджає.
+                    warned = auth_error_from(ytdlp_logger.warnings, url, had_cookies=True)
+                    if warned is not None and warned.kind == 'cookies_invalid':
+                        problem = warned
+                meta['cookies_used'] = cookies.service_for_url(url) if with_cookies and problem is None else None
+                # Куки впали, але завантаження вдалось (публічний контент): користувач нічого
+                # не помітить, а адмін має дізнатися, поки не прийшов запит на 18+.
+                if problem is not None:
+                    meta['cookie_problem'] = problem
+
             # Сортуємо файли за часом створення, щоб зберігався порядок плейлиста
             downloaded_files.sort(key=lambda x: x.stat().st_mtime)
             return downloaded_files[0] if len(downloaded_files) == 1 else downloaded_files
 
+        attempt_messages = ytdlp_logger.errors + ytdlp_logger.warnings
+        all_messages.extend(attempt_messages)
+        if with_cookies:
+            cookie_problem = auth_error_from(attempt_messages, url, had_cookies=True)
         last_errors = ytdlp_logger.errors or last_errors
         logger.info("yt-dlp attempt (%s) produced no files: %s", ", ".join(config) or "no cookies", last_errors[-1:])
 
+    auth_error = cookie_problem or auth_error_from(all_messages, url, had_cookies)
+    if auth_error is not None:
+        raise auth_error
     raise DownloadFailedError(describe_ytdlp_failure(last_errors))
 
 
-async def download_with_gallery_dl(url: str, session_dir: Path, progress_callback=None, tier: str = 'free') -> List[Path]:
+async def download_with_gallery_dl(url: str, session_dir: Path, progress_callback=None, tier: str = 'free',
+                                   meta: Optional[dict] = None) -> List[Path]:
     if progress_callback:
         await progress_callback(10)
 
@@ -429,8 +483,13 @@ async def download_with_gallery_dl(url: str, session_dir: Path, progress_callbac
     if playlist_limit < 9999:
         cmd.extend(["--range", f"1-{playlist_limit}"])
 
-    if Path('cookies.txt').exists():
-        cmd.extend(["--cookies", "cookies.txt"])
+    # Копія кук сервісу, і без запису назад: за замовчуванням gallery-dl зберігає свою
+    # сесію в переданий файл, і паралельні завантаження затирали куки одне одного.
+    cookie_copy = cookies.cookiefile_for(url, session_dir)
+    if cookie_copy is not None:
+        cmd.extend(["--cookies", str(cookie_copy), "-o", "cookies-update=false"])
+    if DOWNLOAD_PROXY:
+        cmd.extend(["--proxy", DOWNLOAD_PROXY])
 
     # `--` перед URL: рядок із Mini App, що починається з `-`, інакше став би опцією gallery-dl.
     cmd.extend(["--", url])
@@ -443,12 +502,18 @@ async def download_with_gallery_dl(url: str, session_dir: Path, progress_callbac
     files = [p for p in collect_media_files(session_dir, recursive=True) if p.suffix.lower() in _GALLERY_SUFFIXES]
     if not files:
         if code != 0:
+            auth_error = auth_error_from([stderr or ""], url, had_cookies=cookie_copy is not None)
+            if auth_error is not None:
+                auth_error.args = (_short_error("gallery-dl", stderr),)
+                raise auth_error
             raise DownloadFailedError(_short_error("gallery-dl", stderr))
         raise DownloadFailedError("Не вдалося завантажити медіа. Можливо, пост порожній, приватний, або посилання недійсне.")
     if code != 0:
         # Частковий успіх (напр. один елемент каруселі недоступний) — віддаємо те, що є.
         logger.warning("gallery-dl finished with code %s: %s", code, (stderr or "")[-300:])
 
+    if meta is not None:
+        meta['cookies_used'] = cookies.service_for_url(url) if cookie_copy is not None else None
     files.sort(key=lambda x: x.stat().st_mtime)
     return files
 
@@ -575,7 +640,7 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
 
     # Перенаправляємо Instagram на gallery-dl
     if host_matches(url, 'instagram.com'):
-        return _apply_size_limit(await download_with_gallery_dl(url, session_dir, progress_callback, tier), max_bytes)
+        return _apply_size_limit(await download_with_gallery_dl(url, session_dir, progress_callback, tier, meta), max_bytes)
 
     # Перенаправляємо Threads на кастомний парсер
     if host_matches(url, 'threads.net', 'threads.com'):
@@ -583,7 +648,7 @@ async def download_media(url: str, format_spec: str = 'bestvideo+bestaudio/best'
 
     # Перенаправляємо фотографії Facebook на gallery-dl (yt-dlp краще працює з відео)
     if host_matches(url, 'facebook.com') and urlsplit(url).path.startswith(('/photo', '/media')):
-        return _apply_size_limit(await download_with_gallery_dl(url, session_dir, progress_callback, tier), max_bytes)
+        return _apply_size_limit(await download_with_gallery_dl(url, session_dir, progress_callback, tier, meta), max_bytes)
 
     if host_matches(url, 'spotify.com'):
         return _apply_size_limit(await download_with_spotdl(url, session_dir, progress_callback, tier), max_bytes)
@@ -650,6 +715,12 @@ def download_trim_sync(url: str, start_sec: int, end_sec: int, session_dir: Path
         'download_ranges': yt_dlp.utils.download_range_func(None, [(start_sec, end_sec)]),
         'js_runtimes': {'deno': {}, 'node': {}},
     }
+    # Раніше обрізка йшла взагалі без кук: 18+ і відео з перевіркою «не бот» не різались.
+    cookie_copy = cookies.cookiefile_for(url, session_dir)
+    if cookie_copy is not None:
+        opts['cookiefile'] = str(cookie_copy)
+    if DOWNLOAD_PROXY:
+        opts['proxy'] = DOWNLOAD_PROXY
 
     from core.config import FFMPEG_WIN_PATH
     if Path(FFMPEG_WIN_PATH).exists():
@@ -683,6 +754,9 @@ def download_trim_sync(url: str, start_sec: int, end_sec: int, session_dir: Path
     if not downloaded_files:
         if opts['logger'].size_exceeded:
             raise SizeLimitExceeded()
+        auth_error = auth_error_from(opts['logger'].errors + opts['logger'].warnings, url, cookie_copy is not None)
+        if auth_error is not None:
+            raise auth_error
         raise DownloadFailedError("Не вдалося завантажити медіа для нарізки.")
 
     input_file = downloaded_files[0]

@@ -156,6 +156,18 @@ async def init_db():
         )
     ''')
     await db.execute('CREATE INDEX IF NOT EXISTS idx_payments_payer ON payments(payer_id, created_at);')
+
+    # Стан кук сервісів (самі куки — у cookies.txt, тут лише коли оновлено й чи працюють):
+    # без цього про мертві куки адмін дізнавався від користувачів.
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS cookie_status (
+            service TEXT PRIMARY KEY,
+            updated_at DATETIME DEFAULT NULL,
+            last_ok_at DATETIME DEFAULT NULL,
+            last_error_at DATETIME DEFAULT NULL,
+            last_error TEXT DEFAULT NULL
+        )
+    ''')
     
     await db.commit()
 
@@ -577,6 +589,47 @@ async def purge_old_download_urls(days: int = 30) -> int:
     ''', (f'-{int(days)} days',))
     await _db_connection.commit()
     return cursor.rowcount
+
+
+def _utc_now_iso() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+async def record_cookie_import(services: List[str]) -> None:
+    """Куки сервісів щойно оновлено: стара помилка більше не актуальна."""
+    now = _utc_now_iso()
+    for service in services:
+        await _db_connection.execute('''
+            INSERT INTO cookie_status (service, updated_at) VALUES (?, ?)
+            ON CONFLICT(service) DO UPDATE SET updated_at = excluded.updated_at, last_error = NULL, last_error_at = NULL
+        ''', (service, now))
+    await _db_connection.commit()
+
+
+async def record_cookie_ok(service: str) -> None:
+    await _db_connection.execute('''
+        INSERT INTO cookie_status (service, last_ok_at) VALUES (?, ?)
+        ON CONFLICT(service) DO UPDATE SET last_ok_at = excluded.last_ok_at
+    ''', (service, _utc_now_iso()))
+    await _db_connection.commit()
+
+
+async def record_cookie_error(service: str, error: str) -> None:
+    await _db_connection.execute('''
+        INSERT INTO cookie_status (service, last_error_at, last_error) VALUES (?, ?, ?)
+        ON CONFLICT(service) DO UPDATE SET last_error_at = excluded.last_error_at, last_error = excluded.last_error
+    ''', (service, _utc_now_iso(), error[:300]))
+    await _db_connection.commit()
+
+
+async def clear_cookie_status(service: str) -> None:
+    await _db_connection.execute('DELETE FROM cookie_status WHERE service = ?', (service,))
+    await _db_connection.commit()
+
+
+async def get_cookie_status() -> dict:
+    async with _db_connection.execute('SELECT * FROM cookie_status') as cursor:
+        return {row['service']: dict(row) for row in await cursor.fetchall()}
 
 
 async def mark_retention_promo_received(telegram_id: int):

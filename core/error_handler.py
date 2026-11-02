@@ -14,6 +14,18 @@ from locales import get_text
 logger = logging.getLogger(__name__)
 
 
+# Тип проблеми доступу → текст користувачу. «Куки мертві» і «перевірка на бота» для
+# користувача однакові: сервіс тимчасово не пускає бота, адміна вже повідомлено.
+AUTH_ERROR_KEYS = {
+    'cookies_invalid': 'auth_blocked',
+    'bot_check': 'auth_blocked',
+    'age_restricted': 'auth_age_restricted',
+    'private': 'auth_private',
+    'login_required': 'auth_login_required',
+    'rate_limited': 'auth_rate_limited',
+}
+
+
 def classify_media_error(e: Exception):
     """Повертає (ключ локалі або None, чи слати звіт у канал помилок).
 
@@ -22,8 +34,12 @@ def classify_media_error(e: Exception):
     """
     from aiogram.exceptions import TelegramEntityTooLarge
     from core.net_guard import ResponseTooLargeError, UnsafeURLError
-    from downloader import DownloadTimeoutError, SizeLimitExceeded
+    from downloader import AuthRequiredError, DownloadTimeoutError, SizeLimitExceeded
 
+    if isinstance(e, AuthRequiredError):
+        # Не баг бота, а обмеження сервісу (18+, приватне, мертві куки): звіт не потрібен,
+        # а адміну піде окреме сповіщення з порадою (core/cookie_monitor.py).
+        return AUTH_ERROR_KEYS.get(e.kind, 'auth_login_required'), False
     if isinstance(e, UnsafeURLError):
         return 'unsafe_url', False
     if isinstance(e, (SizeLimitExceeded, ResponseTooLargeError, TelegramEntityTooLarge)) or "SIZE_LIMIT_EXCEEDED" in str(e):
@@ -82,6 +98,14 @@ async def handle_media_error(e: Exception, bot, status_msg, url: str, user: dict
                 schedule_delete(bot, notice.chat.id, notice.message_id, 30)
         except Exception as notify_error:
             logger.debug("Could not notify user about download error: %s", notify_error)
+
+    from downloader import AuthRequiredError
+    if isinstance(e, AuthRequiredError):
+        from core import cookie_monitor
+        try:
+            await cookie_monitor.report_problem(bot, e, url)
+        except Exception:
+            logger.exception("Could not report cookie problem")
 
     if should_report and ERROR_LOG_CHANNEL_ID:
         try:

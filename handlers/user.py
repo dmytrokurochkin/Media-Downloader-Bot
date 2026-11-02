@@ -481,7 +481,8 @@ async def process_support_message(message: Message, state: FSMContext, bot: Bot)
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     lang = user['language_code']
     
-    if message.text and (_is_menu_text(message.text) or message.text.startswith('/')):
+    typed = message.text or message.caption or ""
+    if typed and (_is_menu_text(typed) or typed.startswith('/')):
         await state.clear()
         msg = await message.reply(get_text(lang, 'input_cancelled'))
         schedule_delete(bot, msg.chat.id, msg.message_id, 10)
