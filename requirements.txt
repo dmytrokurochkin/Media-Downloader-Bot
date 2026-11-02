@@ -1,4 +1,4 @@
-aiogram==3.29.1
+aiogram==3.31.0
 # Схеми даних з Mini App (core/webapp_data.py). Версію обмежує aiogram.
 pydantic>=2
 # yt-dlp breaks whenever YouTube changes its backend, so it is deliberately
