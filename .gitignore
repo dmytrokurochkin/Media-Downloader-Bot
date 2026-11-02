@@ -2,6 +2,10 @@ cookies.txt
 tqueue.binlog
 webhooks_db.binlog
 td.binlog
+# Робоча тека локального Bot API зі старих деплоїв: усередині теки названі
+# ПОВНИМ токеном бота, тож випадковий `git add .` злив би токен.
+tg-api-workdir/
+backups/
 
 # Dev-session runtime artifacts (local process tracking, QA scratch files)
 bot_pid.txt

@@ -4,9 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Media Downloader Bot</title>
+    <!-- CSP: лише власні скрипти + SDK Telegram, жодних inline-скриптів чи onclick-атрибутів.
+         Це другий рубіж проти XSS: навіть якщо текст користувача десь потрапить у DOM як HTML,
+         браузер не виконає з нього скрипт. connect-src https: — бо адреса API (ngrok) динамічна. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src https:; object-src 'none'; base-uri 'none'; form-action 'none'">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=34">
+    <link rel="stylesheet" href="style.css?v=35">
 </head>
 <body>
     <div class="app-container">
@@ -106,7 +110,7 @@
                         <li id="label_vip_desc_3">⚡ Maximum speed</li>
                         <li id="label_vip_desc_4">🎶 High quality audio</li>
                     </ul>
-                    <button class="primary-btn pulse" id="buyVipBtn" onclick="buyVip()">Buy VIP (Stars)</button>
+                    <button class="primary-btn pulse" id="buyVipBtn">Buy VIP (Stars)</button>
                 </div>
             </section>
 
@@ -134,7 +138,7 @@
                         </div>
                     </div>
                     
-                    <button class="primary-btn pulse" onclick="submitSmartTrim()" id="btn_smart_trim">Завантажити фрагмент</button>
+                    <button class="primary-btn pulse" id="btn_smart_trim">Завантажити фрагмент</button>
                 </div>
             </section>
             
@@ -169,7 +173,7 @@
                     <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
                         <label id="label_editor_cover" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Обкладинка (Cover Art):</label>
                         <div style="position: relative;">
-                            <input type="file" id="editor_cover" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;" onchange="document.getElementById('editor_cover_name').innerText = this.files.length ? this.files[0].name : getText(lang, 'no_file_chosen')">
+                            <input type="file" id="editor_cover" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;">
                             <div class="glass-input" style="padding: 0.6rem; display: flex; align-items: center; justify-content: flex-start; pointer-events: none;">
                                 <span id="btn_choose_file_1" style="background: rgba(255,255,255,0.15); padding: 0.35rem 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-right: 10px; font-weight: 500;">Оберіть файл</span>
                                 <span id="editor_cover_name" style="font-size: 0.85rem; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Файл не обрано</span>
@@ -178,7 +182,7 @@
                         <span id="label_editor_cover_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Бот попросить надіслати фото в чат після натискання кнопки.</span>
                     </div>
                     
-                    <button class="primary-btn pulse" onclick="submitAudioEditor()" id="btn_audio_editor">Зберегти та завантажити</button>
+                    <button class="primary-btn pulse" id="btn_audio_editor">Зберегти та завантажити</button>
                 </div>
             </section>
             
@@ -249,7 +253,7 @@
                     <div class="setting-row" style="margin-bottom: 1.5rem; text-align: left;">
                         <label id="label_watermark_file" style="display: block; font-weight: 500; margin-bottom: 0.5rem; font-size: 0.9rem; opacity: 0.9;">Завантажити логотип</label>
                         <div style="position: relative;">
-                            <input type="file" id="settings_watermark_file" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;" onchange="document.getElementById('settings_watermark_name').innerText = this.files.length ? this.files[0].name : getText(lang, 'no_file_chosen')">
+                            <input type="file" id="settings_watermark_file" accept="image/*" style="opacity: 0; position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer;">
                             <div class="glass-input" style="padding: 0.6rem; display: flex; align-items: center; justify-content: flex-start; pointer-events: none;">
                                 <span id="btn_choose_file_2" style="background: rgba(255,255,255,0.15); padding: 0.35rem 0.75rem; border-radius: 8px; font-size: 0.85rem; margin-right: 10px; font-weight: 500;">Оберіть файл</span>
                                 <span id="settings_watermark_name" style="font-size: 0.85rem; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Файл не обрано</span>
@@ -258,7 +262,7 @@
                         <span id="label_watermark_hint" style="font-size: 0.75rem; opacity: 0.7; display: block; margin-top: 0.5rem;">Якщо ви оберете файл, бот попросить вас надіслати його в чат для підтвердження.</span>
                     </div>
 
-                    <button class="primary-btn pulse" onclick="saveSettings()" id="btn_save_settings">Зберегти</button>
+                    <button class="primary-btn pulse" id="btn_save_settings">Зберегти</button>
                 </div>
             </section>
 
@@ -266,27 +270,27 @@
 
         <!-- Bottom Navigation -->
         <nav class="bottom-nav glass">
-            <button class="nav-item active" id="nav-profile" onclick="switchTab('profile', this)">
+            <button class="nav-item active" id="nav-profile" data-tab="profile">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 <span id="tab_profile">Profile</span>
             </button>
-            <button class="nav-item" id="nav-leaderboard" onclick="switchTab('leaderboard', this)">
+            <button class="nav-item" id="nav-leaderboard" data-tab="leaderboard">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M16 11V3H8v6H2v12h20V11h-6zm-6-6h4v14h-4V5zm-6 6h4v8H4v-8zm16 8h-4v-6h4v6z"/></svg>
                 <span id="tab_leaderboard">Ranks</span>
             </button>
-            <button class="nav-item" id="nav-store" onclick="switchTab('store', this)">
+            <button class="nav-item" id="nav-store" data-tab="store">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
                 <span id="tab_store">Store</span>
             </button>
-            <button class="nav-item" id="nav-clipper" onclick="switchTab('clipper', this)">
+            <button class="nav-item" id="nav-clipper" data-tab="clipper">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6 2 2 7-7V3h-3z"/></svg>
                 <span id="tab_clipper">Clipper</span>
             </button>
-            <button class="nav-item" id="nav-audio-editor" onclick="switchTab('audio-editor', this)">
+            <button class="nav-item" id="nav-audio-editor" data-tab="audio-editor">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
                 <span id="tab_audio_editor">Audio</span>
             </button>
-            <button class="nav-item" id="nav-settings" onclick="switchTab('settings', this)">
+            <button class="nav-item" id="nav-settings" data-tab="settings">
                 <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22l-1.92 3.32c-.12.21-.07.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
                 <span id="tab_settings">Settings</span>
             </button>
@@ -295,7 +299,7 @@
         <!-- Public Profile Modal -->
         <div id="publicProfileModal" class="modal" style="display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
             <div class="modal-content glass fade-in" style="padding: 2rem; width: 85%; max-width: 400px; position: relative;">
-                <span class="close-modal" onclick="closeProfileModal()" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
+                <span class="close-modal" id="closeProfileModalBtn" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
                 <div class="center-text">
                     <div class="avatar-placeholder" style="margin: 0 auto 1rem; width: 80px; height: 80px;">
                         <img id="modalAvatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" src="assets/avatars/1.jpg" alt="Avatar">
@@ -306,17 +310,17 @@
                 
                 <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; text-align: left;">
                     <div class="stat-row">
-                        <span style="opacity: 0.8;">Завантажень:</span>
+                        <span style="opacity: 0.8;" id="label_modal_downloads">Завантажень:</span>
                         <span class="stat-value" id="modalDownloads">0</span>
                     </div>
                     <div class="stat-row">
-                        <span style="opacity: 0.8;">Трафік:</span>
+                        <span style="opacity: 0.8;" id="label_modal_traffic">Трафік:</span>
                         <span class="stat-value" id="modalTraffic">0 MB</span>
                     </div>
                 </div>
                 
                 <div style="margin-top: 1.5rem;">
-                    <h3 style="margin-bottom: 0.5rem; text-align: left; opacity: 0.9; font-size: 1.25rem; font-weight: 600;">Досягнення</h3>
+                    <h3 id="label_modal_badges" style="margin-bottom: 0.5rem; text-align: left; opacity: 0.9; font-size: 1.25rem; font-weight: 600;">Досягнення</h3>
                     <div class="badges-grid" id="modalBadgesGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 10px; text-align: left;">
                         <!-- Filled via JS -->
                     </div>
@@ -325,9 +329,9 @@
         </div>
 
         <!-- Badge Info Modal -->
-        <div id="badgeInfoModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;" onclick="if(event.target === this) closeBadgeModal()">
+        <div id="badgeInfoModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
             <div class="modal-content glass fade-in" style="position: relative; text-align: center; padding: 2rem; width: 85%; max-width: 350px;">
-                <span class="close-modal" onclick="closeBadgeModal()" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
+                <span class="close-modal" id="closeBadgeModalBtn" style="color: #fff; position: absolute; right: 20px; top: 15px; font-size: 28px; font-weight: bold; cursor: pointer; z-index: 2;">&times;</span>
                 
                 <div id="badgeModalIcon" style="font-size: 4rem; margin-bottom: 1rem; transition: filter 0.3s;">🏆</div>
                 <h2 id="badgeModalName" style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--primary-color);">Badge Name</h2>
@@ -347,7 +351,7 @@
 
     </div>
 
-    <script src="locales.js?v=42"></script>
-    <script src="app.js?v=42"></script>
+    <script src="locales.js?v=43"></script>
+    <script src="app.js?v=43"></script>
 </body>
 </html>

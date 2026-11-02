@@ -53,7 +53,7 @@ The project includes an integrated **Telegram Mini App** (Web App) with a modern
 
 ## 🛠 Tech stack
 
-- **Backend**: Python 3.10+, [Aiogram 3](https://docs.aiogram.dev/en/latest/)
+- **Backend**: Python 3.11+, [Aiogram 3](https://docs.aiogram.dev/en/latest/)
 - **Database**: SQLite (using `aiosqlite`)
 - **Download components**: `yt-dlp`, `gallery-dl`, `spotdl`
 - **Media processing**: `FFmpeg`, `mutagen`, `Pillow`
@@ -71,7 +71,7 @@ cd Media-Downloader-Bot
 ```
 
 ### 2. Configure the environment
-Create a `.env` file in the project root and fill it in with the following data:
+Copy `.env.example` to `.env` and fill it in — every variable is documented there. The minimum is:
 ```env
 BOT_TOKEN=your_bot_token
 LOCAL_API_SERVER_URL=http://127.0.0.1:8081
@@ -80,7 +80,7 @@ API_HASH=your_api_hash
 ```
 
 ### 3. Install dependencies
-Make sure `ffmpeg` is installed on your system.
+Make sure `ffmpeg` and [Deno](https://deno.com) 2.3+ are installed: `yt-dlp` needs a JavaScript runtime to solve YouTube's challenges, otherwise YouTube returns only some formats or none.
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -110,6 +110,15 @@ To check the system logs, use:
 ```bash
 sudo journalctl -u tg-media-bot -f
 ```
+
+Run `./auto_deploy.sh` again to apply updates (it restarts the services). `UPDATE_BOT_API=1 ./auto_deploy.sh` also rebuilds the Telegram Bot API server from the latest sources. The database is backed up daily to `backups/` (the 14 newest copies are kept) — copy them off the server as well.
+
+## 🔒 Security notes
+
+- The local Bot API server runs as a separate `tgbotapi` user and listens on `127.0.0.1` only. In `--local` mode it can read any local file for any bot token, so never expose port `8081`.
+- The bot's internal API also listens on localhost; expose it only over HTTPS (ngrok or a reverse proxy).
+- Links from users are checked against private and internal addresses, including every redirect, before anything is downloaded.
+- Keep `.env`, `cookies.txt`, `database.db` and `backups/` private: the deploy script sets `600` permissions on them.
 
 ## ⚠️ Legal information (Disclaimer)
 

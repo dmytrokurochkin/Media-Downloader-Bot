@@ -1,21 +1,25 @@
 import asyncio
+import contextlib
+import html
+import logging
 import re
+import threading
 import time
 import uuid
+from typing import Optional
 from pathlib import Path
-from core.utils import delete_later, temporary_download_session
-
-import aiohttp
-from bs4 import BeautifulSoup
+from core.utils import detect_language, extract_url, host_matches, is_forbidden_url, schedule_delete, temporary_download_session, text_matches, url_host
 
 from aiogram import Router, F, Bot
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import (
     Message, CallbackQuery, FSInputFile, InputMediaPhoto, InputMediaVideo,
     InputMediaAudio, InputMediaDocument, InlineQueryResultCachedVideo,
-    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent
+    InlineQueryResultCachedAudio, InlineQueryResultCachedDocument, InlineQueryResultCachedPhoto, InlineQueryResultArticle, InputTextMessageContent,
+    ReplyParameters, LinkPreviewOptions
 )
 
-from core.config import URL_PATTERN, FORBIDDEN_URL_PATTERN, TIER_LIMITS
+from core.config import TIER_LIMITS, TELEGRAM_UPLOAD_LIMIT, STORAGE_CHAT_ID, BOT_USERNAME
 from core.loader import bot
 from database import get_or_create_user, get_daily_download_count, add_download_record, add_downloaded_bytes, get_active_ad
 from downloader import download_media
@@ -27,16 +31,28 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 media_router = Router()
+logger = logging.getLogger(__name__)
 
 class AudioEditorState(StatesGroup):
     waiting_for_cover = State()
 
 # State variables
 download_semaphore = None
-active_downloads = 0
 queue_waiters = 0
 active_requests = 0
 user_cooldowns = set()
+
+# Скільки чекати на завантаження файлу в Telegram (великі файли через локальний Bot API).
+UPLOAD_TIMEOUT = 3600
+
+
+def get_download_semaphore() -> asyncio.Semaphore:
+    """Семафор паралельних завантажень, створюється ліниво в робочому event loop."""
+    global download_semaphore
+    if download_semaphore is None:
+        from core.config import MAX_CONCURRENT_DOWNLOADS
+        download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    return download_semaphore
 
 class ProgressTracker:
     def __init__(self, message: Message, bot: Bot, lang: str):
@@ -77,72 +93,79 @@ class ProgressTracker:
             except Exception:
                 pass
 
-async def get_page_title(url: str) -> str:
+# Сервіси з DRM, які yt-dlp не підтримує: краще одразу сказати, ніж качати й падати.
+_UNSUPPORTED_SERVICES = ('music.apple.com', 'deezer.com', 'deezer.page.link')
+_AUDIO_SERVICES = ('music.youtube.com', 'spotify.com', 'soundcloud.com')
+
+
+async def get_download_block_reason(user: dict, url: str) -> Optional[str]:
+    """Ключ локалі з причиною відмови або None.
+
+    Одні правила для всіх точок входу (посилання, гостьовий режим, Smart Trim,
+    редактор тегів у Mini App): раніше частина з них не перевіряла денний ліміт
+    і заборонені посилання взагалі.
+    """
+    if is_forbidden_url(url):
+        return 'link_rejected'
+    if host_matches(url, *_UNSUPPORTED_SERVICES):
+        return 'service_not_supported'
+    limits = TIER_LIMITS.get(user.get('tier', 'free'), TIER_LIMITS['free'])
+    if await get_daily_download_count(user['telegram_id']) >= limits['daily']:
+        return 'limit_reached'
+    return None
+
+
+async def _notify_download_blocked(message: Message, reason_key: str, lang: str, is_guest_mode: bool, is_callback: bool):
+    """Пояснює користувачу, чому завантаження не почалось."""
+    text = get_text(lang, reason_key)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=5) as resp:
-                if resp.status == 200:
-                    html = await resp.text()
-                    soup = BeautifulSoup(html, 'html.parser')
-                    title = soup.find('title')
-                    if title and title.text:
-                        return title.text.strip()[:100]
-    except Exception:
-        pass
-    return "Unknown"
+        if is_guest_mode:
+            # Гостьовий запит треба закрити відповіддю, інакше в користувача висить «завантаження».
+            if getattr(message, "guest_query_id", None):
+                plain = re.sub(r'<[^>]+>', '', text)
+                await message.answer_guest_query(result=InlineQueryResultArticle(
+                    id=str(uuid.uuid4()),
+                    title=plain.split('\n', 1)[0][:64],
+                    description=plain[:200],
+                    input_message_content=InputTextMessageContent(message_text=text)
+                ))
+            return
+        if is_callback:
+            await bot.edit_message_text(text, chat_id=message.chat.id, message_id=message.message_id)
+            notice = message
+        else:
+            notice = await message.reply(text)
+        schedule_delete(bot, notice.chat.id, notice.message_id, 30)
+    except Exception as e:
+        logger.debug("Could not notify about blocked download: %s", e)
+
 
 @media_router.guest_message()
 async def guest_text_handler(message: Message):
+    # У guest_message from_user — це сам бот; справжній відправник — guest_bot_caller_user.
     caller = getattr(message, "guest_bot_caller_user", None) or message.from_user
     text = (message.text or message.caption or "").strip()
-    
-    bot_me = await bot.get_me()
-    bot_username = f"@{bot_me.username}" if bot_me.username else ""
-    if bot_username:
-        text = text.replace(bot_username, "").strip()
-        
-    url = None
-    match = URL_PATTERN.search(text)
-    if match:
-        url = match.group(0)
-    elif message.reply_to_message and (message.reply_to_message.text or message.reply_to_message.caption):
-        match = URL_PATTERN.search(message.reply_to_message.text or message.reply_to_message.caption)
-        if match:
-            url = match.group(0)
-            
+
+    bot_me = await bot.me()
+    if bot_me.username:
+        text = text.replace(f"@{bot_me.username}", " ").strip()
+
+    url = extract_url(text)
+    if not url and message.reply_to_message:
+        url = extract_url(message.reply_to_message.text or message.reply_to_message.caption)
     if not url:
         return
-        
-    user = await get_or_create_user(caller.id, getattr(caller, "username", ""), getattr(caller, "full_name", ""))
-    
-    if FORBIDDEN_URL_PATTERN.search(url) or caller.id in user_cooldowns:
-        if caller.id in user_cooldowns:
-            try:
-                result_article = InlineQueryResultArticle(
-                    id=str(uuid.uuid4()),
-                    title="⏳ Зачекайте!",
-                    description=get_text(user['language_code'], 'cooldown'),
-                    input_message_content=InputTextMessageContent(
-                        message_text=get_text(user['language_code'], 'cooldown')
-                    )
-                )
-                await message.answer_guest_query(result=result_article)
-            except Exception as e:
-                print(f"Guest cooldown error: {e}")
-        return
-        
-    daily_count = await get_daily_download_count(caller.id)
-    if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-        return
-        
+
+    user = await get_or_create_user(
+        caller.id, getattr(caller, "username", None) or "", getattr(caller, "full_name", None) or "",
+        language_code=detect_language(getattr(caller, "language_code", None)),
+    )
+    # Ліміти, cooldown і заборонені посилання перевіряє start_download — і закриває
+    # гостьовий запит поясненням (раніше відмова була мовчазною, запит «висів»).
     await process_url(message, url, user, is_guest_mode=True)
 
 class PdfState(StatesGroup):
     waiting_for_pdf_url = State()
-
-def text_matches(key: str):
-    from locales import get_text
-    return F.text.in_([get_text(lang, key) for lang in ['uk', 'en', 'pl']])
 
 @media_router.message(text_matches('menu_save_pdf'))
 async def btn_save_pdf(message: Message, state: FSMContext):
@@ -150,28 +173,28 @@ async def btn_save_pdf(message: Message, state: FSMContext):
     tier = user.get('tier', 'free').lower()
     
     if tier not in ['pro', 'max']:
-        msg = await message.reply("⭐️ Збереження статей у PDF доступне лише для тарифів Pro та Max.")
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+        msg = await message.reply(get_text(user['language_code'], 'pdf_pro_only'))
+        schedule_delete(bot, msg.chat.id, msg.message_id, 30)
         return
         
-    msg = await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
+    await message.reply(get_text(user['language_code'], 'user_pdf_prompt'))
     await state.set_state(PdfState.waiting_for_pdf_url)
 
 @media_router.message(PdfState.waiting_for_pdf_url)
 async def process_pdf_url(message: Message, state: FSMContext):
-    url = message.text.strip()
-    if not url.startswith('http'):
-        await message.reply("⚠️ Невірний формат посилання. Будь ласка, надішліть коректний URL.")
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    lang = user['language_code']
+    # message.text буває None (фото, стікер) — раніше .strip() на ньому валив хендлер.
+    url = extract_url(message.text)
+    if not url:
+        await message.reply(get_text(lang, 'pdf_invalid_url'))
         return
         
     await state.clear()
-    status_msg = await message.reply("⏳ Завантажую та генерую PDF-документ...")
+    status_msg = await message.reply(get_text(lang, 'pdf_generating'))
     
     try:
         from core.pdf_generator import generate_article_pdf
-        from core.utils import temporary_download_session
-        import time
-        from pathlib import Path
         
         session_dir = Path(f"downloads/pdf_{time.time_ns()}")
         
@@ -184,9 +207,13 @@ async def process_pdf_url(message: Message, state: FSMContext):
                 if not safe_title:
                     safe_title = "Article"
                     
-                from aiogram.types import FSInputFile
                 fs_file = FSInputFile(path=pdf_path, filename=f"{safe_title}.pdf")
-                caption = f"📄 <b>{title}</b>\n\n🔗 <a href='{url}'>Джерело</a>"
+                # Назва статті й URL — дані зі сторінки/від користувача: без екранування
+                # `<` або `'` ламали parse_mode=HTML, і готовий PDF не відправлявся.
+                caption = (
+                    f"📄 <b>{html.escape(title[:900])}</b>\n\n"
+                    f"🔗 <a href=\"{html.escape(url, quote=True)}\">{get_text(lang, 'pdf_source')}</a>"
+                )
                 
                 await bot.send_document(
                     chat_id=message.chat.id,
@@ -194,189 +221,139 @@ async def process_pdf_url(message: Message, state: FSMContext):
                     caption=caption,
                     parse_mode="HTML"
                 )
-                try:
+                with contextlib.suppress(TelegramAPIError):
                     await status_msg.delete()
-                except Exception:
-                    pass
             else:
                 raise Exception("PDF файл не згенеровано.")
     except Exception as e:
-        err_str = str(e)
+        from core.net_guard import UnsafeURLError
+        if isinstance(e, UnsafeURLError):
+            await status_msg.edit_text(get_text(lang, 'unsafe_url'))
+            return
+        logger.warning("PDF generation failed for %s: %s", url, e)
+        err_str = str(e) or type(e).__name__
         if len(err_str) > 500:
             err_str = err_str[:500] + "..."
-        await status_msg.edit_text(f"❌ Помилка генерації PDF:\n{err_str}")
+        await status_msg.edit_text(get_text(lang, 'pdf_error', error=html.escape(err_str)))
 
 @media_router.message(F.text)
-async def text_handler(message: Message):
-    bot_me = await bot.get_me()
-    username = f"@{bot_me.username}" if bot_me.username else ""
-    is_guest_mode = username in message.text if username else False
-    
-    url = None
-    match = URL_PATTERN.search(message.text)
-    if match:
-        url = match.group(0)
-    elif is_guest_mode and message.reply_to_message and message.reply_to_message.text:
-        match = URL_PATTERN.search(message.reply_to_message.text)
-        if match:
-            url = match.group(0)
-            
-    if url:
-        # Очищуємо URL, якщо користувач прикріпив тег бота без пробілу
-        if bot_me.username and url.endswith(f"@{bot_me.username}"):
-            url = url[:-len(f"@{bot_me.username}")]
-        
-        user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
-        
-        if not is_guest_mode:
-            if FORBIDDEN_URL_PATTERN.search(url):
-                msg = await message.reply(get_text(user['language_code'], 'link_rejected'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-            if message.from_user.id in user_cooldowns:
-                msg = await message.reply(get_text(user['language_code'], 'cooldown'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-            daily_count = await get_daily_download_count(message.from_user.id)
-            if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-                msg = await message.reply(get_text(user['language_code'], 'limit_reached'))
-                asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                return
-        else:
-            if FORBIDDEN_URL_PATTERN.search(url) or message.from_user.id in user_cooldowns:
-                if message.from_user.id in user_cooldowns:
-                    try:
-                        msg = await message.reply(get_text(user['language_code'], 'cooldown'))
-                        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-                    except Exception: pass
-                return
-            daily_count = await get_daily_download_count(message.from_user.id)
-            if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-                return
-                
-        await process_url(message, url, user, is_guest_mode=is_guest_mode)
+async def text_handler(message: Message, state: FSMContext):
+    bot_me = await bot.me()
+    mention = f"@{bot_me.username}" if bot_me.username else None
+    text = message.text
+    if mention:
+        # «@Bot https://...» або «https://...@Bot» — тег бота не частина посилання.
+        text = text.replace(mention, " ")
+
+    url = extract_url(text)
+    # У групі бота можна тегнути відповіддю на повідомлення з посиланням.
+    if not url and mention and mention in message.text and message.reply_to_message:
+        url = extract_url(message.reply_to_message.text or message.reply_to_message.caption)
+    if not url:
+        return
+
+    # Нове посилання — новий запит: незавершений діалог (підтримка, обкладинка, теги)
+    # скасовуємо, інакше наступне повідомлення чи завантаження пішло б не туди.
+    await state.clear()
+
+    user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
+    # Тег бота в групі раніше вмикав «гостьовий режим»: файл ішов в особисті, а в групі
+    # була тиша (або нічого, якщо людина не запускала бота). Гостьовий режим тепер —
+    # лише справжні guest_message, а в групі бот відповідає в групу.
+    await process_url(message, url, user)
+
+
+_YT_HEIGHTS = {'1080p': 1080, '720p': 720, '480p': 480, '360p': 360}
+
+
+def youtube_format(quality: str) -> str:
+    """Рядок формату yt-dlp для якості (одне місце замість чотирьох копій)."""
+    if quality == 'audio':
+        return 'bestaudio/best'
+    height = _YT_HEIGHTS.get(quality)
+    if height is None:
+        return 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+    return (
+        f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]'
+        f'/bestvideo[height<={height}]+bestaudio'
+        f'/best[height<={height}]/best'
+    )
+
+
+def quality_for_tier(tier: str) -> str:
+    return {'free': '720p', 'pro': '1080p'}.get(tier, 'best')
+
 
 async def process_url(message: Message, url: str, user: dict, is_guest_mode: bool = False, state=None):
-    if 'threads.com' in url:
-        url = url.replace('threads.com', 'threads.net')
-        
-    is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
-    
-    if is_audio_service:
+    if host_matches(url, *_AUDIO_SERVICES):
         await start_download(message, url, 'bestaudio/best', user, is_guest_mode=is_guest_mode, state=state)
-    elif 'youtube.com' in url or 'youtu.be' in url:
+    elif host_matches(url, 'youtube.com', 'youtu.be'):
         if is_guest_mode:
-            quality = user.get('guest_yt_quality', 'best')
-            tier = user.get('tier', 'free')
-            if tier == 'free' and quality in ['best', '1080p']:
-                quality = '720p'
-            elif tier == 'pro' and quality == 'best':
-                quality = '1080p'
-                
-            if quality == '1080p':
-                fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
-            elif quality == '720p':
-                fmt = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-            elif quality == '480p':
-                fmt = 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best'
-            elif quality == '360p':
-                fmt = 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360][ext=mp4]/best'
-            elif quality == 'audio':
-                fmt = 'bestaudio/best'
-            else:
-                fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-            await start_download(message, url, fmt, user, is_guest_mode=True, state=state)
+            from core.webapp_data import normalize_guest_quality
+            quality = normalize_guest_quality(user.get('guest_yt_quality'), user.get('tier', 'free'))
+            await start_download(message, url, youtube_format(quality), user, is_guest_mode=True, state=state)
         else:
+            lang = user['language_code']
+            # Перевіряємо одразу, щоб не показувати вибір якості, коли завантаження однаково
+            # не почнеться (остаточна перевірка — у start_download).
+            block_reason = 'cooldown' if user['telegram_id'] in user_cooldowns else await get_download_block_reason(user, url)
+            if block_reason:
+                await _notify_download_blocked(message, block_reason, lang, False, False)
+                return
             await message.reply(
-                get_text(user['language_code'], 'choose_yt_quality', url=url),
-                reply_markup=get_youtube_keyboard(url, user['language_code']),
-                disable_web_page_preview=True
+                get_text(lang, 'choose_yt_quality', url=html.escape(url)),
+                reply_markup=get_youtube_keyboard(url, lang),
+                link_preview_options=LinkPreviewOptions(is_disabled=True)
             )
     else:
-        tier = user.get('tier', 'free')
-        if tier == 'free':
-            fmt = 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best'
-        elif tier == 'pro':
-            fmt = 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best'
-        else:
-            fmt = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        fmt = youtube_format(quality_for_tier(user.get('tier', 'free')))
         await start_download(message, url, fmt, user, is_guest_mode=is_guest_mode, state=state)
+
+_YT_ACTIONS = {'1080': '1080p', '720': '720p', '360': '360p', 'audio': 'audio', 'best': 'best'}
 
 @media_router.callback_query(F.data.startswith("yt_"))
 async def youtube_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    
-    action = callback.data.split('_')[1]
-    
-    text_parts = callback.message.text.split("🔗 ")
-    if len(text_parts) < 2:
-        await callback.message.edit_text("URL Error")
+
+    quality = _YT_ACTIONS.get(callback.data.removeprefix("yt_"))
+    message = callback.message
+    # Повідомлення, старші за 48 год, приходять як InaccessibleMessage — без тексту.
+    text = getattr(message, "text", None)
+    url = extract_url(text.split("🔗", 1)[1]) if text and "🔗" in text else None
+    if quality is None or not url:
         return
-    url = text_parts[1].strip()
-    
-    format_spec = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-    if action == '1080':
-        format_spec = 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best'
-    elif action == '720':
-        format_spec = 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best'
-    elif action == '360':
-        format_spec = 'bestvideo[ext=mp4][height<=360]+bestaudio[ext=m4a]/best[ext=mp4][height<=360]/best'
-    elif action == 'audio':
-        format_spec = 'bestaudio/best'
-        
+
     user = await get_or_create_user(callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+    lang = user['language_code']
     tier = user.get('tier', 'free')
-    
-    if tier == 'free' and action in ['1080', 'best']:
-        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
+
+    if (tier == 'free' and quality in ('1080p', 'best')) or (tier == 'pro' and quality == 'best'):
+        msg = await message.reply(get_text(lang, 'quality_limit'))
+        schedule_delete(bot, msg.chat.id, msg.message_id, 30)
         return
-    if tier == 'pro' and action == 'best':
-        msg = await callback.message.reply(get_text(user['language_code'], 'quality_limit'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    if callback.from_user.id in user_cooldowns:
-        msg = await callback.message.reply(get_text(user['language_code'], 'cooldown'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    daily_count = await get_daily_download_count(callback.from_user.id)
-    if daily_count >= TIER_LIMITS[user['tier']]['daily']:
-        msg = await callback.message.reply(get_text(user['language_code'], 'limit_reached'))
-        asyncio.create_task(delete_later(bot, msg.chat.id, msg.message_id, 30))
-        return
-        
-    await callback.message.edit_text(get_text(user['language_code'], 'starting_download'))
-    await start_download(callback.message, url, format_spec, user, is_callback=True, state=state)
+
+    await _safe_edit(message, get_text(lang, 'starting_download'))
+    await start_download(message, url, youtube_format(quality), user, is_callback=True, state=state)
 
 @media_router.message(AudioEditorState.waiting_for_cover, F.photo | F.document)
 async def cover_photo_handler(message: Message, state: FSMContext):
     user = await get_or_create_user(message.from_user.id, message.from_user.username, message.from_user.full_name)
     state_data = await state.get_data()
-    
+
     if message.photo:
         file_id = message.photo[-1].file_id
     elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
         file_id = message.document.file_id
     else:
-        text = "⚠️ Будь ласка, надішліть коректне фото."
-        if user['language_code'] == 'en': text = "⚠️ Please send a valid photo."
-        elif user['language_code'] == 'pl': text = "⚠️ Wyślij poprawne zdjęcie."
-        await message.answer(text)
+        await message.answer(get_text(user['language_code'], 'send_valid_photo'))
         return
-        
-    session_dir = Path(f"downloads/cover_{time.time_ns()}")
-    session_dir.mkdir(parents=True, exist_ok=True)
-    cover_path = session_dir / f"cover_{file_id}.jpg"
-    
-    await bot.download(file_id, destination=cover_path)
-    
-    await state.update_data(
-        edit_tags=True,
-        cover_path=str(cover_path)
-    )
-    
+
+    # Обкладинку тут не качаємо: зберігаємо file_id, а сам файл завантажується вже
+    # всередині тимчасової сесії start_download. Раніше тека downloads/cover_*
+    # створювалась тут і видалялась лише при успіху — покинутий флоу чи помилка
+    # лишали її на диску назавжди.
+    await state.update_data(edit_tags=True, cover_file_id=file_id)
+
     url = state_data.get('url')
     await state.set_state(None)
 
@@ -387,346 +364,452 @@ async def prepare_caption_with_ad(original_caption: str, user: dict) -> str:
     if user.get('tier', 'free').lower() == 'free':
         ad_text = await get_active_ad()
         if ad_text:
-            ad_block = f"\n\n📢 Спонсор: {ad_text}"
+            ad_block = f"\n\n{get_text(user.get('language_code', 'uk'), 'ad_label')} {ad_text}"
             max_len = 1024 - len(ad_block)
+            # Нову рекламу адмінка обмежує AD_MAX_LENGTH, але стара в БД могла бути довшою:
+            # тоді max_len ставав від'ємним, обрізання ламалось, підпис виходив > 1024
+            # символів і Telegram відхиляв файл. Завелику рекламу просто пропускаємо.
+            if max_len < 32:
+                logger.warning("Active ad is too long for a caption (%d chars), skipping it", len(ad_text))
+                return original_caption[:1024]
             if len(original_caption) > max_len:
                 original_caption = original_caption[:max_len - 3] + "..."
             return original_caption + ad_block
     return original_caption[:1024]
 
+
+_VIDEO_EXTS = {'.mp4', '.mkv', '.webm', '.mov'}
+_PHOTO_EXTS = {'.jpg', '.jpeg', '.png', '.webp'}
+_AUDIO_EXTS = {'.mp3', '.m4a', '.wav', '.opus', '.flac', '.ogg'}
+# Що взагалі має сенс відправляти користувачу, коли бекенд повернув кілька файлів.
+SENDABLE_EXTS = _VIDEO_EXTS | _PHOTO_EXTS | _AUDIO_EXTS | {'.zip'}
+
+
+def media_kind(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext in _VIDEO_EXTS:
+        return 'video'
+    if ext in _PHOTO_EXTS:
+        return 'photo'
+    if ext in _AUDIO_EXTS:
+        return 'audio'
+    return 'document'
+
+
+def _reply_parameters(message_id: Optional[int]) -> Optional[ReplyParameters]:
+    # allow_sending_without_reply: якщо повідомлення з посиланням уже видалене, файл
+    # однаково дійде. Раніше це емулювалось повторною відправкою в `except`, яка
+    # ковтала БУДЬ-ЯКУ помилку — і невдала доставка мовчки рахувалась як успіх.
+    if message_id is None:
+        return None
+    return ReplyParameters(message_id=message_id, allow_sending_without_reply=True)
+
+
+async def send_media_file(bot_instance, chat_id: int, path: Path, *, caption: Optional[str], reply_to: Optional[int] = None,
+                          title: Optional[str] = None, performer: Optional[str] = None) -> Message:
+    """Відправляє один файл відповідним методом Telegram. Помилки НЕ ковтаються."""
+    file = FSInputFile(path=path, filename=path.name)
+    kwargs = {'chat_id': chat_id, 'caption': caption, 'request_timeout': UPLOAD_TIMEOUT}
+    reply_parameters = _reply_parameters(reply_to)
+    if reply_parameters is not None:
+        kwargs['reply_parameters'] = reply_parameters
+
+    kind = media_kind(path)
+    if kind == 'video':
+        return await bot_instance.send_video(video=file, supports_streaming=True, **kwargs)
+    if kind == 'photo':
+        return await bot_instance.send_photo(photo=file, **kwargs)
+    if kind == 'audio':
+        return await bot_instance.send_audio(audio=file, title=title, performer=performer, **kwargs)
+    return await bot_instance.send_document(document=file, **kwargs)
+
+
+def _is_caption_problem(error: Exception) -> bool:
+    text = str(error).lower()
+    return "parse entities" in text or "caption is too long" in text or "caption_too_long" in text
+
+
+async def send_with_caption_fallback(send, caption: str, plain_caption: str):
+    """Викликає send(caption); якщо Telegram відхилив саме підпис з рекламою — повторює без неї.
+
+    Повертає (результат, використаний підпис). Інші помилки пробрасуються як є.
+    """
+    try:
+        return await send(caption), caption
+    except TelegramBadRequest as e:
+        if caption != plain_caption and _is_caption_problem(e):
+            logger.warning("Caption with ad was rejected (%s); resending without the ad", e)
+            return await send(plain_caption), plain_caption
+        raise
+
+
+def _build_input_media(path: Path, kind: str, caption: Optional[str], title, performer):
+    file = FSInputFile(path=path, filename=path.name)
+    if kind == 'video':
+        return InputMediaVideo(media=file, caption=caption, supports_streaming=True)
+    if kind == 'photo':
+        return InputMediaPhoto(media=file, caption=caption)
+    if kind == 'audio':
+        return InputMediaAudio(media=file, caption=caption, title=title, performer=performer)
+    return InputMediaDocument(media=file, caption=caption)
+
+
+async def send_media_groups(bot_instance, chat_id: int, files: list, caption: str, plain_caption: str,
+                            reply_to: Optional[int] = None, title=None, performer=None) -> None:
+    """Відправляє файли альбомами по 10: фото+відео разом, аудіо й документи окремо (вимога Telegram)."""
+    groups = {'visual': [], 'audio': [], 'document': []}
+    for path in files:
+        kind = media_kind(path)
+        groups['visual' if kind in ('video', 'photo') else kind].append((path, kind))
+
+    reply_parameters = _reply_parameters(reply_to)
+    for items in groups.values():
+        for start in range(0, len(items), 10):
+            chunk = items[start:start + 10]
+
+            async def send(cap, chunk=chunk, start=start):
+                # Підпис — лише на першому файлі першого альбому кожного типу, як і раніше.
+                first_caption = cap if start == 0 else None
+                if len(chunk) == 1:
+                    # sendMediaGroup за документацією вимагає 2–10 елементів.
+                    path, _ = chunk[0]
+                    return await send_media_file(bot_instance, chat_id, path, caption=first_caption,
+                                                 reply_to=reply_to, title=title, performer=performer)
+                media = [_build_input_media(path, kind, first_caption if i == 0 else None, title, performer)
+                         for i, (path, kind) in enumerate(chunk)]
+                kwargs = {'chat_id': chat_id, 'media': media, 'request_timeout': UPLOAD_TIMEOUT}
+                if reply_parameters is not None:
+                    kwargs['reply_parameters'] = reply_parameters
+                return await bot_instance.send_media_group(**kwargs)
+
+            await send_with_caption_fallback(send, caption, plain_caption)
+
+
+async def _answer_guest_article(message: Message, title: str, text: str) -> None:
+    await message.answer_guest_query(result=InlineQueryResultArticle(
+        id=str(uuid.uuid4()),
+        title=title[:64],
+        description=re.sub(r'<[^>]+>', '', text)[:200],
+        input_message_content=InputTextMessageContent(message_text=text),
+    ))
+
+
+def _cached_guest_result(sent: Message, caption: Optional[str], lang: str):
+    """Кешований результат для answer_guest_query з file_id щойно завантаженого файлу.
+
+    Тип визначаємо за тим, що повернув Telegram, а не за розширенням: .webm, надісланий
+    як відео, може повернутись документом.
+    """
+    result_id = str(uuid.uuid4())
+    if sent.video:
+        return InlineQueryResultCachedVideo(id=result_id, video_file_id=sent.video.file_id, title=get_text(lang, 'guest_video_title'), caption=caption)
+    if sent.photo:
+        return InlineQueryResultCachedPhoto(id=result_id, photo_file_id=sent.photo[-1].file_id, caption=caption)
+    if sent.audio:
+        return InlineQueryResultCachedAudio(id=result_id, audio_file_id=sent.audio.file_id, caption=caption)
+    document = sent.document
+    return InlineQueryResultCachedDocument(
+        id=result_id, document_file_id=document.file_id,
+        title=(document.file_name or get_text(lang, 'guest_document_title'))[:64], caption=caption,
+    )
+
+
+async def _deliver_guest(bot_instance, files: list, user: dict, message: Message, caption: str, plain_caption: str,
+                         lang: str, title=None, performer=None) -> None:
+    caller_id = user['telegram_id']
+    start_bot_text = get_text(lang, 'guest_start_bot', bot=BOT_USERNAME)
+
+    if len(files) > 1:
+        # Альбом гостьовою відповіддю не надіслати — шлемо в особисті й закриваємо запит статтею.
+        try:
+            await send_media_groups(bot_instance, caller_id, files, caption, plain_caption, title=title, performer=performer)
+        except TelegramForbiddenError:
+            await _answer_guest_article(message, get_text(lang, 'guest_start_bot_title'), start_bot_text)
+            return
+        await _answer_guest_article(message, get_text(lang, 'guest_album_sent_title'), get_text(lang, 'guest_album_sent'))
+        return
+
+    # Щоб віддати файл гостьовою відповіддю, потрібен його file_id, тобто файл треба
+    # спершу кудись завантажити: у службовий канал (якщо налаштований) або в особисті.
+    upload_chat = STORAGE_CHAT_ID or caller_id
+    try:
+        sent, used_caption = await send_with_caption_fallback(
+            lambda cap: send_media_file(bot_instance, upload_chat, files[0], caption=cap, title=title, performer=performer),
+            caption, plain_caption,
+        )
+    except TelegramForbiddenError:
+        if STORAGE_CHAT_ID:
+            raise  # бот не має доступу до каналу-сховища — це помилка конфігурації
+        # Людина ще не запускала бота, тож написати їй в особисті неможливо.
+        await _answer_guest_article(message, get_text(lang, 'guest_start_bot_title'), start_bot_text)
+        return
+
+    await message.answer_guest_query(result=_cached_guest_result(sent, used_caption, lang))
+
+
 async def dispatch_telegram_media(bot_instance, target_chat_id: int, filepath, user: dict, is_guest_mode: bool, message: Message, lang: str, title: str = None, performer: str = None) -> int:
-    """Chunks media and sends to Telegram. Returns total file size."""
-    file_size = 0
-    if isinstance(filepath, list):
-        visual_group = []
-        audio_group = []
-        document_group = []
-        
+    """Відправляє файл(и) у Telegram і повертає їхній загальний розмір.
+
+    Будь-яка помилка відправки пробрасується нагору, тож завантаження зараховується
+    лише після реальної доставки. Раніше невдала відправка одного файлу ковталась:
+    користувач нічого не отримував, а спроба з'їдала денний ліміт.
+    """
+    files = filepath if isinstance(filepath, list) else [filepath]
+    if is_guest_mode:
         # Гостьовий режим: ліміт 10 файлів загалом
-        if is_guest_mode:
-            filepath = filepath[:10]
-        
-        caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
+        files = files[:10]
+    total_size = sum(path.stat().st_size for path in files)
 
-        for path in filepath:
-            file_size += path.stat().st_size
-            fs_file = FSInputFile(path=path, filename=path.name)
-            ext = path.suffix.lower()
-            if ext in ['.mp4', '.mkv', '.webm']:
-                visual_group.append(InputMediaVideo(media=fs_file, caption=caption if not visual_group else None))
-            elif ext in ['.jpg', '.jpeg', '.png', '.webp']:
-                visual_group.append(InputMediaPhoto(media=fs_file, caption=caption if not visual_group else None))
-            elif ext in ['.mp3', '.m4a', '.wav', '.opus']:
-                audio_group.append(InputMediaAudio(media=fs_file, caption=caption if not audio_group else None, title=title, performer=performer))
-            elif ext not in ['.json', '.description', '.part', '.ytdl', '.spotdl']:
-                document_group.append(InputMediaDocument(media=fs_file, caption=caption if not document_group else None))
-        
-        async def send_group_in_chunks(group):
-            if is_guest_mode:
-                group = group[:10]
-                try:
-                    caller_id = user['telegram_id']
-                    await bot_instance.send_media_group(chat_id=caller_id, media=group)
-                    
-                    try:
-                        result_article = InlineQueryResultArticle(
-                            id=str(uuid.uuid4()),
-                            title="✅ Альбом завантажено!",
-                            description="Файли відправлено вам в особисті повідомлення.",
-                            input_message_content=InputTextMessageContent(
-                                message_text="✅ Медіа успішно завантажено!\n👉 Перевірте ваші приватні повідомлення з ботом."
-                            )
-                        )
-                        await message.answer_guest_query(result=result_article)
-                    except Exception as e:
-                        print(f"Guest answer error: {e}")
-                except Exception as e:
-                    print(f"Guest mode group send failed: {e}")
-                return
+    plain_caption = get_text(lang, 'caption_signature')
+    caption = await prepare_caption_with_ad(plain_caption, user)
 
-            for i in range(0, len(group), 10):
-                chunk = group[i:i+10]
-                try:
-                    await bot_instance.send_media_group(
-                        chat_id=target_chat_id, 
-                        media=chunk, 
-                        reply_to_message_id=message.message_id, 
-                        request_timeout=3600
-                    )
-                except Exception:
-                    await bot_instance.send_media_group(chat_id=target_chat_id, media=chunk, request_timeout=3600)
-        
-        if visual_group: await send_group_in_chunks(visual_group)
-        if audio_group: await send_group_in_chunks(audio_group)
-        if document_group: await send_group_in_chunks(document_group)
-        
+    if is_guest_mode:
+        await _deliver_guest(bot_instance, files, user, message, caption, plain_caption, lang, title, performer)
+        return total_size
+
+    reply_to = message.message_id if message is not None else None
+    if len(files) == 1:
+        await send_with_caption_fallback(
+            lambda cap: send_media_file(bot_instance, target_chat_id, files[0], caption=cap, reply_to=reply_to, title=title, performer=performer),
+            caption, plain_caption,
+        )
     else:
-        file_size = filepath.stat().st_size
-        fs_file = FSInputFile(path=filepath, filename=filepath.name)
-        if is_guest_mode:
-            try:
-                caller_id = user['telegram_id']
-                caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
-                if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                    res = await bot_instance.send_video(chat_id=caller_id, video=fs_file, request_timeout=3600, caption=caption)
-                    file_id = res.video.file_id
-                    result_media = InlineQueryResultCachedVideo(id=str(uuid.uuid4()), video_file_id=file_id, title="Відео", caption=caption)
-                elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                    res = await bot_instance.send_photo(chat_id=caller_id, photo=fs_file, request_timeout=3600, caption=caption)
-                    file_id = res.photo[-1].file_id
-                    result_media = InlineQueryResultCachedPhoto(id=str(uuid.uuid4()), photo_file_id=file_id, caption=caption)
-                elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                    res = await bot_instance.send_audio(chat_id=caller_id, audio=fs_file, request_timeout=3600, caption=caption, title=title, performer=performer)
-                    file_id = res.audio.file_id
-                    result_media = InlineQueryResultCachedAudio(id=str(uuid.uuid4()), audio_file_id=file_id, caption=caption)
-                else:
-                    res = await bot_instance.send_document(chat_id=caller_id, document=fs_file, request_timeout=3600, caption=caption)
-                    file_id = res.document.file_id
-                    result_media = InlineQueryResultCachedDocument(id=str(uuid.uuid4()), document_file_id=file_id, title="Документ", caption=caption)
-                
-                await message.answer_guest_query(result=result_media)
-            except Exception as e:
-                print(f"Guest mode single send failed: {e}")
-        else:
-            caption = await prepare_caption_with_ad(get_text(lang, 'caption_signature'), user)
-            try:
-                if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                    await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
-                elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                    await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption, title=title, performer=performer)
-                elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                    await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
-                else:
-                    await bot_instance.send_document(chat_id=target_chat_id, document=fs_file, reply_to_message_id=message.message_id, request_timeout=3600, caption=caption)
-            except Exception:
-                try:
-                    if filepath.suffix in ['.mp4', '.mkv', '.webm']:
-                        await bot_instance.send_video(chat_id=target_chat_id, video=fs_file, request_timeout=3600, caption=caption)
-                    elif filepath.suffix in ['.mp3', '.m4a', '.wav']:
-                        await bot_instance.send_audio(chat_id=target_chat_id, audio=fs_file, request_timeout=3600, caption=caption, title=title, performer=performer)
-                    elif filepath.suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-                        await bot_instance.send_photo(chat_id=target_chat_id, photo=fs_file, request_timeout=3600, caption=caption)
-                    else:
-                        await bot_instance.send_document(chat_id=target_chat_id, document=fs_file, request_timeout=3600, caption=caption)
-                except Exception: pass
-    return file_size
+        await send_media_groups(bot_instance, target_chat_id, files, caption, plain_caption, reply_to=reply_to, title=title, performer=performer)
+    return total_size
 
-async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False, state=None):
+
+def extract_domain(url: str) -> str:
+    return url_host(url) or "unknown"
+
+
+async def _take_tag_request(state) -> Optional[dict]:
+    """Забирає з FSM запит на редагування тегів і одразу очищає стан.
+
+    Раніше стан чистився лише при успішному завантаженні, тож після помилки теги
+    «прилипали» до наступного, вже не пов'язаного завантаження.
+    """
+    if state is None:
+        return None
+    data = await state.get_data()
+    if not data.get('edit_tags'):
+        return None
+    await state.clear()
+    return data
+
+
+async def _record_download_stats(user_id: int, url: str, title: str, file_size: int, success: bool) -> None:
+    await add_download_record(user_id, url, extract_domain(url), title, file_size, success)
+    if success:
+        await add_downloaded_bytes(user_id, file_size)
+        await check_and_award_badges(user_id)
+
+
+async def _safe_edit(status_msg: Optional[Message], text: str) -> None:
+    if status_msg is None:
+        return
+    with contextlib.suppress(TelegramAPIError):
+        await bot.edit_message_text(text, chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+
+
+async def start_download(message: Message, url: str, format_spec: str, user: dict, is_callback: bool = False, is_guest_mode: bool = False, state=None) -> bool:
     lang = user['language_code']
+    user_id = user['telegram_id']
+
+    # Cooldown перевіряється й захоплюється без await між ними. Раніше перевірка
+    # була в хендлерах, а захоплення — тут, після кількох await-ів, тож два швидкі
+    # запити (наприклад, посилання + Mini App) проходили обидва.
+    if user_id in user_cooldowns:
+        await _notify_download_blocked(message, 'cooldown', lang, is_guest_mode, is_callback)
+        return False
+    user_cooldowns.add(user_id)
+    try:
+        block_reason = await get_download_block_reason(user, url)
+    except BaseException:
+        user_cooldowns.discard(user_id)
+        raise
+    if block_reason:
+        user_cooldowns.discard(user_id)
+        await _notify_download_blocked(message, block_reason, lang, is_guest_mode, is_callback)
+        return False
+
+    global queue_waiters, active_requests
     target_chat = getattr(message, "guest_bot_caller_chat", None) or message.chat
     target_chat_id = target_chat.id if is_guest_mode else message.chat.id
-    
-    global queue_waiters, active_requests
-    from core.config import MAX_CONCURRENT_DOWNLOADS
-    
-    in_queue = False
-    in_queue_cleared = False
-    
-    if active_requests >= MAX_CONCURRENT_DOWNLOADS:
-        in_queue = True
-        queue_waiters += 1
-        pos = queue_waiters
-        status_text = get_text(lang, 'in_queue', pos=pos)
-    else:
-        status_text = get_text(lang, 'starting_download')
-        
-    active_requests += 1
-    
+    semaphore = get_download_semaphore()
+
     status_msg = None
-    if not is_guest_mode:
-        if is_callback:
-            status_msg = message
-            if in_queue:
-                try:
-                    await bot.edit_message_text(status_text, chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                except Exception:
-                    pass
-        else:
-            try:
-                status_msg = await message.reply(status_text)
-            except Exception:
-                status_msg = await bot.send_message(target_chat_id, status_text)
-            
-    tracker = ProgressTracker(status_msg, bot, lang) if not is_guest_mode else None
-    
-    user_cooldowns.add(user['telegram_id'])
-    
-    filepath = None
     success = False
     file_size = 0
-    domain = re.search(r'https?://([^/]+)', url).group(1) if re.search(r'https?://([^/]+)', url) else "unknown"
-    page_title = await get_page_title(url)
-    
+    in_queue = False
+    download_meta = {}
     session_dir = Path(f"downloads/{time.time_ns()}")
-    
+
+    # Усі лічильники змінюються лише всередині try/finally. Раніше інкремент стояв до
+    # try, і якщо відправка статусу падала (бот заблокований, кікнутий, flood 429),
+    # декремент не виконувався — лічильник ріс назавжди, і всі бачили «ви в черзі».
+    active_requests += 1
     try:
-        async with temporary_download_session(session_dir):
-            async with download_semaphore:
+        tag_request = await _take_tag_request(state)
+
+        # Черга — коли всі слоти семафора зайняті. Колись рахувалось за active_requests,
+        # куди потрапляли й ті, хто вже вантажить файл у Telegram.
+        if semaphore.locked():
+            in_queue = True
+            queue_waiters += 1
+            status_text = get_text(lang, 'in_queue', pos=queue_waiters)
+        else:
+            status_text = get_text(lang, 'starting_download')
+
+        if not is_guest_mode:
+            if is_callback:
+                status_msg = message
                 if in_queue:
-                    in_queue_cleared = True
+                    await _safe_edit(status_msg, status_text)
+            else:
+                status_msg = await message.reply(status_text)
+
+        tracker = ProgressTracker(status_msg, bot, lang) if status_msg is not None else None
+
+        async with temporary_download_session(session_dir):
+            async with semaphore:
+                if in_queue:
+                    in_queue = False
                     queue_waiters -= 1
-                    if not is_guest_mode:
-                        try:
-                            await bot.edit_message_text(get_text(lang, 'starting_download'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                        except Exception:
-                            pass
-                        
+                    await _safe_edit(status_msg, get_text(lang, 'starting_download'))
+
                 tracker_update = tracker.update if tracker else None
-                filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir)
-            
-            if not is_guest_mode:
-                try:
-                    await asyncio.sleep(2.0)
-                    await bot.edit_message_text(get_text(lang, 'downloaded_sending'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                except Exception:
-                    pass
-                    
+                filepath = await download_media(url, format_spec, tracker_update, tier=user['tier'], session_dir=session_dir, meta=download_meta)
+
+            await _safe_edit(status_msg, get_text(lang, 'downloaded_sending'))
+
             if isinstance(filepath, list):
                 # Filter out metadata files
-                valid_exts = ['.mp4', '.mkv', '.webm', '.jpg', '.jpeg', '.png', '.webp', '.mp3', '.m4a', '.wav', '.opus']
-                media_files = [p for p in filepath if p.suffix.lower() in valid_exts]
+                media_files = [p for p in filepath if p.suffix.lower() in SENDABLE_EXTS]
                 if len(media_files) == 1:
                     filepath = media_files[0]
                 elif len(media_files) > 1:
                     filepath = media_files
-            
+
             # Watermark integration
             from core.media_processor import process_watermarks
             filepath = await process_watermarks(filepath, user, bot, session_dir)
-            
+
             # Audio Tags Editor integration
             audio_title, audio_performer = None, None
-            if state:
-                state_data = await state.get_data()
-                if state_data.get('edit_tags'):
-                    audio_title = state_data.get('title')
-                    audio_performer = state_data.get('artist')
-                    from core.audio_tags import process_audio_tags
-                    filepath = await process_audio_tags(filepath, state_data)
-                    await state.clear()
-                    
-            # Send media
-            target_msg = status_msg if is_callback else message
-            file_size = await dispatch_telegram_media(bot, target_chat_id, filepath, user, is_guest_mode, target_msg, lang, title=audio_title, performer=audio_performer)
-            
-            if not is_guest_mode:
-                try:
+            if tag_request:
+                audio_title = tag_request.get('title') or None
+                audio_performer = tag_request.get('artist') or None
+                cover_file_id = tag_request.get('cover_file_id')
+                if cover_file_id:
+                    cover_path = session_dir / "cover.jpg"
+                    await bot.download(cover_file_id, destination=cover_path)
+                    tag_request['cover_path'] = str(cover_path)
+                from core.audio_tags import process_audio_tags
+                filepath = await process_audio_tags(filepath, tag_request)
+
+            # Відповідаємо на повідомлення з посиланням. Для вибору якості YouTube це
+            # повідомлення, на яке відповідала клавіатура (сама вона видаляється).
+            if is_callback:
+                reply_target = status_msg.reply_to_message if status_msg is not None else None
+            else:
+                reply_target = message
+            file_size = await dispatch_telegram_media(bot, target_chat_id, filepath, user, is_guest_mode, reply_target, lang, title=audio_title, performer=audio_performer)
+
+            if status_msg is not None:
+                with contextlib.suppress(TelegramAPIError):
                     await bot.delete_message(chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                except Exception:
-                    pass
             success = True
-            
+
     except Exception as e:
         from core.error_handler import handle_media_error
-        await handle_media_error(e, bot, status_msg, url, user, lang, is_guest_mode)
+        await handle_media_error(e, bot, status_msg, url, user, lang, is_guest_mode, message=message)
     finally:
-        user_cooldowns.discard(user['telegram_id'])
+        user_cooldowns.discard(user_id)
         active_requests -= 1
-        
-        if in_queue and not in_queue_cleared:
+        if in_queue:
             queue_waiters -= 1
-        
-        # Аналітика
-        is_audio_service = any(x in url for x in ['music.youtube.com', 'spotify.com', 'soundcloud.com', 'apple.com/music', 'deezer.com'])
-        if success and is_audio_service and isinstance(filepath, list):
-            for p in filepath:
-                # size is roughly tracked in file_size for normal files, but we can't easily retrieve per-file size now since they are deleted!
-                # Wait! The context manager deletes the files after the 'with' block completes!
-                # `finally` block runs AFTER the `with` block exits, which means files are already deleted.
-                pass 
-            # We'll just log the total size
-            await add_download_record(user['telegram_id'], url, domain, page_title, file_size, True)
-        else:
-            await add_download_record(user['telegram_id'], url, domain, page_title, file_size, success)
-            
-        if success:
-            await add_downloaded_bytes(user['telegram_id'], file_size)
-            await check_and_award_badges(user['telegram_id'])
-            
-        if success and not is_guest_mode and message.chat.type == "private":
-            try:
-                from aiogram.types import MenuButtonDefault
-                await bot.set_chat_menu_button(
-                    chat_id=target_chat_id,
-                    menu_button=MenuButtonDefault()
-                )
-            except Exception:
-                pass
 
-async def process_smart_trim(message: Message, user: dict, url: str, start_sec: int, end_sec: int, status_msg: Message):
-    global active_downloads, queue_waiters, active_requests
+        # Аналітика не повинна маскувати результат завантаження.
+        try:
+            await _record_download_stats(user_id, url, download_meta.get('title', ''), file_size, success)
+        except Exception:
+            logger.exception("Could not record download stats for %s", user_id)
+
+        if success and not is_guest_mode and message.chat.type == "private":
+            with contextlib.suppress(TelegramAPIError):
+                from aiogram.types import MenuButtonDefault
+                await bot.set_chat_menu_button(chat_id=target_chat_id, menu_button=MenuButtonDefault())
+
+    return success
+
+async def process_smart_trim(message: Message, user: dict, url: str, start_sec: int, end_sec: int, status_msg: Message) -> bool:
+    global queue_waiters, active_requests
     lang = user['language_code']
+    user_id = user['telegram_id']
+    tier = user.get('tier', 'free')
 
     if active_requests > 100:
-        await bot.edit_message_text(get_text(lang, 'too_many_requests'), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-        return
+        await _safe_edit(status_msg, get_text(lang, 'too_many_requests'))
+        return False
 
+    # Smart Trim раніше взагалі не дивився на cooldown: можна було паралельно
+    # запускати обрізки й звичайні завантаження.
+    if user_id in user_cooldowns:
+        await _safe_edit(status_msg, get_text(lang, 'cooldown'))
+        return False
+    user_cooldowns.add(user_id)
+
+    success = False
+    file_size = 0
     active_requests += 1
-    queue_waiters += 1
-
     progress = ProgressTracker(status_msg, bot, lang)
+    session_dir = Path("downloads") / f"session_trim_{uuid.uuid4().hex}"
 
     try:
-        from handlers.media import download_semaphore
-        if download_semaphore is None:
-            # Init semaphore if not already
-            from core.config import MAX_CONCURRENT_DOWNLOADS
-            from handlers import media
-            media.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
-            
-        async with download_semaphore:
-            queue_waiters -= 1
-            active_downloads += 1
-            
-            try:
-                from core.config import BASE_DIR
-                import uuid
-                session_dir = BASE_DIR / "downloads" / f"session_trim_{uuid.uuid4()}"
-                
-                async with temporary_download_session(session_dir):
-                    await progress.update(5)
-                    
-                    from downloader import download_trim_sync
-                    loop = asyncio.get_running_loop()
-                    output_file = await asyncio.to_thread(
-                        download_trim_sync,
-                        url, start_sec, end_sec, session_dir, progress.update, loop
+        from core.net_guard import ensure_public_url
+        from downloader import DownloadTimeoutError, YTDLP_JOB_TIMEOUT, download_trim_sync, enforce_size_limit
+
+        # Обрізка йде напряму в yt-dlp, оминаючи download_media, тож SSRF-перевірка — тут.
+        await ensure_public_url(url)
+
+        async with temporary_download_session(session_dir):
+            async with get_download_semaphore():
+                await progress.update(5)
+                cancel_event = threading.Event()
+                loop = asyncio.get_running_loop()
+                try:
+                    output_file = await asyncio.wait_for(
+                        asyncio.to_thread(download_trim_sync, url, start_sec, end_sec, session_dir, progress.update, loop, tier, cancel_event),
+                        timeout=YTDLP_JOB_TIMEOUT,
                     )
-                    
-                    if output_file and output_file.exists():
-                        await progress.update(100)
-                        await bot.edit_message_text("✅ Обрізане відео готове! Завантажую в Telegram...", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-                        
-                        file_size = output_file.stat().st_size
-                        
-                        # Upload to Telegram
-                        bot_me = await bot.get_me()
-                        caption = await prepare_caption_with_ad(f"✂️ <b>Smart Trim</b>\n\n⬇️ Завантажено через @{bot_me.username}", user)
-                        
-                        from aiogram.types import FSInputFile
-                        await bot.send_video(chat_id=message.chat.id, video=FSInputFile(output_file), caption=caption, parse_mode="HTML")
-                        
-                        # Add stats
-                        await add_download_record(user['telegram_id'], url, "smart_trim", "", file_size, True)
-                        await add_downloaded_bytes(user['telegram_id'], file_size)
-                        await check_and_award_badges(user['telegram_id'])
-                        
-                        try:
-                            await status_msg.delete()
-                        except:
-                            pass
-                    else:
-                        raise Exception("Файл не знайдено після обрізки.")
-                        
-            finally:
-                active_downloads -= 1
+                except asyncio.TimeoutError:
+                    cancel_event.set()
+                    raise DownloadTimeoutError("Обрізка перевищила ліміт часу.") from None
+
+            enforce_size_limit([output_file], min(TIER_LIMITS[tier]['size'], TELEGRAM_UPLOAD_LIMIT))
+            await _safe_edit(status_msg, get_text(lang, 'trim_ready'))
+
+            plain_caption = get_text(lang, 'trim_caption', bot=BOT_USERNAME)
+            caption = await prepare_caption_with_ad(plain_caption, user)
+            await send_with_caption_fallback(
+                lambda cap: send_media_file(bot, message.chat.id, output_file, caption=cap),
+                caption, plain_caption,
+            )
+            file_size = output_file.stat().st_size
+            success = True
+
+            with contextlib.suppress(TelegramAPIError):
+                await status_msg.delete()
 
     except Exception as e:
-        err_str = str(e)
-        if "Ліміт 30 секунд" in err_str or "size limit" in err_str.lower():
-             await bot.edit_message_text(f"⚠️ Помилка: {err_str}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
-        else:
-             print(f"Smart trim error: {e}")
-             await bot.edit_message_text(f"❌ Помилка при обрізці відео: {err_str}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        from core.error_handler import handle_media_error
+        await handle_media_error(e, bot, status_msg, url, user, lang, False, message=message)
     finally:
         active_requests -= 1
+        user_cooldowns.discard(user_id)
+        try:
+            await _record_download_stats(user_id, url, "", file_size, success)
+        except Exception:
+            logger.exception("Could not record trim stats for %s", user_id)
+
+    return success

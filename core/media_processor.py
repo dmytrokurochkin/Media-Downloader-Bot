@@ -1,5 +1,8 @@
+import logging
 from pathlib import Path
 from typing import Union, List
+
+logger = logging.getLogger(__name__)
 
 # Telegram IDs who explicitly asked (via the watermark button) for the watermark
 # to be applied to their next download. One-shot: consumed as soon as it's checked.
@@ -46,5 +49,5 @@ async def process_watermarks(filepath: Union[Path, List[Path]], user: dict, bot,
                 
         return watermarked_files if isinstance(filepath, list) else watermarked_files[0]
     except Exception as wm_e:
-        print(f"Watermark error: {wm_e}")
+        logger.warning("Watermark error for %s: %s", telegram_id, wm_e)
         return filepath

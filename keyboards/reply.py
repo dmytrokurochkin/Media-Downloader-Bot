@@ -4,7 +4,8 @@ from locales import get_text
 
 from aiogram.types import WebAppInfo
 
-def get_main_keyboard(lang: str, webapp_url: str = None) -> ReplyKeyboardMarkup:
+def get_main_keyboard(lang: str, webapp_url: str = None, selective: bool = False) -> ReplyKeyboardMarkup:
+    """Головне меню. selective=True — у групі клавіатуру бачить лише той, кому відповідає бот."""
     builder = ReplyKeyboardBuilder()
     builder.button(text=get_text(lang, 'menu_download'))
     
@@ -19,7 +20,7 @@ def get_main_keyboard(lang: str, webapp_url: str = None) -> ReplyKeyboardMarkup:
     builder.button(text=get_text(lang, 'menu_save_pdf'))
     builder.button(text=get_text(lang, 'menu_hide_keyboard'))
     builder.adjust(2, 2, 2, 1)
-    return builder.as_markup(resize_keyboard=True)
+    return builder.as_markup(resize_keyboard=True, selective=selective)
 
 def get_admin_keyboard(lang: str) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()

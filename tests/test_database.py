@@ -12,8 +12,25 @@ async def test_get_or_create_user_creates_new_user(db):
     assert user["full_name"] == "Alice A"
     assert user["language_code"] == "en"
     assert user["tier"] == "free"
-    assert user["is_vip"] is False
+    assert not user["is_vip"]
     assert user["vip_until"] is None
+    # Новий користувач повертається повним рядком з БД, а не урізаним словником.
+    assert user["total_bytes_downloaded"] == 0
+    assert user["last_active_at"] is not None
+
+
+async def test_get_or_create_user_concurrent_first_calls_do_not_crash(db):
+    # Перші апдейти нового користувача обробляються паралельно: раніше другий INSERT
+    # падав на UNIQUE(telegram_id) посеред хендлера.
+    import asyncio
+    results = await asyncio.gather(*(db.get_or_create_user(111, "alice", "Alice", "uk") for _ in range(5)))
+    assert {r["telegram_id"] for r in results} == {111}
+    assert await db.get_all_users() == [111]
+
+
+async def test_new_user_is_not_immediately_inactive(db):
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    assert await db.get_inactive_users(days_inactive=14) == []
 
 
 async def test_get_or_create_user_is_idempotent(db):
@@ -361,3 +378,103 @@ async def test_update_last_active(db):
         "SELECT last_active_at FROM users WHERE telegram_id = ?", (111,)
     )
     assert rows[0]["last_active_at"] is not None
+
+
+async def test_get_inactive_users_handles_mixed_formats_and_skips_banned(db):
+    await db.get_or_create_user(111, "alice", "Alice", "uk")
+    await db.get_or_create_user(222, "bob", "Bob", "en")
+    await db.get_or_create_user(333, "eve", "Eve", "en")
+    # Формат CURRENT_TIMESTAMP (з міграції) і ISO з 'T' та зсувом — обидва мають працювати.
+    await db._db_connection.execute("UPDATE users SET last_active_at = datetime('now', '-30 days') WHERE telegram_id = 111")
+    await db._db_connection.execute(
+        "UPDATE users SET last_active_at = ? WHERE telegram_id IN (222, 333)",
+        ((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)).isoformat(),),
+    )
+    await db._db_connection.commit()
+    await db.ban_user_bot(333, None)
+
+    inactive = {u["telegram_id"]: u for u in await db.get_inactive_users(days_inactive=14)}
+
+    assert set(inactive) == {111, 222}
+    assert inactive[111]["language_code"] == "uk"
+
+
+async def test_daily_count_ignores_yesterday(db):
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    await db.add_download_record(111, "https://a.example/x", "a.example", "", 1, True)
+    await db._db_connection.execute(
+        "INSERT INTO downloads (telegram_id, url, domain, page_title, file_size, success, timestamp) "
+        "VALUES (111, 'u', 'a.example', '', 1, 1, datetime('now', '-1 day'))"
+    )
+    await db._db_connection.commit()
+
+    assert await db.get_daily_download_count(111) == 1
+
+
+async def test_purge_old_download_urls_keeps_aggregates(db):
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    await db.add_download_record(111, "https://fresh.example/x", "fresh.example", "Fresh", 1, True)
+    await db._db_connection.execute(
+        "INSERT INTO downloads (telegram_id, url, domain, page_title, file_size, success, timestamp) "
+        "VALUES (111, 'https://old.example/secret', 'old.example', 'Old', 5, 1, datetime('now', '-40 days'))"
+    )
+    await db._db_connection.commit()
+
+    assert await db.purge_old_download_urls(30) == 1
+
+    rows = {r["domain"]: dict(r) for r in await db._db_connection.execute_fetchall("SELECT * FROM downloads")}
+    assert rows["old.example"]["url"] is None and rows["old.example"]["page_title"] is None
+    assert rows["old.example"]["file_size"] == 5
+    assert rows["fresh.example"]["url"] == "https://fresh.example/x"
+    assert await db.purge_old_download_urls(30) == 0
+
+
+async def test_leaderboard_cache_is_invalidated_by_anonymity_toggle(db):
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    await db.add_download_record(111, "https://youtube.com/x", "youtube.com", "", 1, True)
+    assert [u["telegram_id"] for u in await db.get_top_users(10)] == [111]
+
+    # Кеш: новий запис не видно одразу…
+    await db.get_or_create_user(222, "bob", "Bob", "en")
+    await db.add_download_record(222, "https://youtube.com/y", "youtube.com", "", 1, True)
+    await db.add_download_record(222, "https://youtube.com/z", "youtube.com", "", 1, True)
+    assert [u["telegram_id"] for u in await db.get_top_users(10)] == [111]
+
+    # …але анонімність застосовується одразу: користувач зникає з топу.
+    await db.update_user_settings(111, "en", "best", True, "standard", "bottom_right")
+    assert [u["telegram_id"] for u in await db.get_top_users(10)] == [222]
+
+
+async def test_purge_keeps_leaderboards_limits_and_profiles(db):
+    # Очищення стирає лише url і page_title: топи, ліміти, профілі й бейджі рахуються
+    # за рядками, доменом і датою, тож до і після очищення мають бути ідентичні.
+    await db.get_or_create_user(111, "alice", "Alice", "en")
+    await db.get_or_create_user(222, "bob", "Bob", "en")
+    for uid, url, domain, age in [
+        (111, "https://youtube.com/a", "youtube.com", "-40 days"),
+        (111, "https://m.youtube.com/b", "m.youtube.com", "-35 days"),
+        (222, "https://www.tiktok.com/c", "www.tiktok.com", "-60 days"),
+        (222, "https://www.tiktok.com/d", "www.tiktok.com", "-1 days"),
+    ]:
+        await db._db_connection.execute(
+            "INSERT INTO downloads (telegram_id, url, domain, page_title, file_size, success, timestamp) "
+            "VALUES (?, ?, ?, 'title', 1, 1, datetime('now', ?))",
+            (uid, url, domain, age),
+        )
+    await db._db_connection.commit()
+    await db.add_download_record(111, "https://youtube.com/today", "youtube.com", "title", 1, True)
+
+    async def snapshot():
+        db._leaderboard_cache.clear()
+        return (
+            await db.get_top_users(10),
+            await db.get_top_domains(),
+            await db.get_user_stats(111),
+            await db.get_user_stats(222),
+            await db.get_daily_download_count(111),
+        )
+
+    before = await snapshot()
+    assert await db.purge_old_download_urls(30) == 3
+    assert await snapshot() == before
+    assert [u["count"] for u in before[0]] == [3, 2]

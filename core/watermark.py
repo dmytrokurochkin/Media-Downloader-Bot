@@ -2,6 +2,9 @@ import asyncio
 from pathlib import Path
 from PIL import Image
 
+# Ліміт часу на накладання водяного знака на відео (перекодування).
+WATERMARK_TIMEOUT = 30 * 60
+
 def _get_overlay_coords(position: str, padding: int = 10) -> str:
     if position == 'top_left':
         return f"{padding}:{padding}"
@@ -34,15 +37,13 @@ async def apply_video_watermark(input_video_path: Path, watermark_path: Path, po
         str(output_path)
     ]
 
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
-    )
-    stdout, stderr = await process.communicate()
-    
-    if process.returncode != 0:
-        raise Exception(f"FFmpeg watermark error: {stderr.decode()}")
+    # Перекодування великого відео може йти довго, але не вічно: зависання ffmpeg
+    # раніше блокувало завантаження назавжди.
+    from core.utils import run_command
+    returncode, _, stderr = await run_command(cmd, timeout=WATERMARK_TIMEOUT, name="ffmpeg")
+
+    if returncode != 0:
+        raise Exception(f"FFmpeg watermark error: {stderr[-1000:]}")
 
 def apply_image_watermark_sync(input_image_path: Path, watermark_path: Path, position: str, output_path: Path):
     with Image.open(input_image_path) as base_img:

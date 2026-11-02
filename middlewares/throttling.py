@@ -4,6 +4,7 @@ from typing import Callable, Dict, Any, Awaitable
 from cachetools import TTLCache
 import time
 from locales import get_text
+from core.utils import get_event_user
 
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, rate_limit: float = 1.0):
@@ -16,11 +17,19 @@ class ThrottlingMiddleware(BaseMiddleware):
         event: Any,
         data: Dict[str, Any]
     ) -> Any:
-        
+
+        # Повідомлення про оплату не можна відкидати: якщо користувач надіслав будь-що
+        # за секунду до нього, throttling «з'їдав» successful_payment — гроші списані,
+        # а покупка не видана.
+        if isinstance(event, Message) and event.successful_payment:
+            return await handler(event, data)
+
         user_id = None
         if isinstance(event, (Message, CallbackQuery)):
-            user_id = event.from_user.id
-            
+            # Для guest_message рахуємо того, хто покликав бота, а не самого бота.
+            user = get_event_user(event)
+            user_id = user.id if user else None
+
         if user_id:
             if user_id in self.cache:
                 # Spam detected, ignore the event
@@ -32,5 +41,5 @@ class ThrottlingMiddleware(BaseMiddleware):
                 return
             else:
                 self.cache[user_id] = time.time()
-                
+
         return await handler(event, data)

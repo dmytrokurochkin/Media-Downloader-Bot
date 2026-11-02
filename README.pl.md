@@ -53,7 +53,7 @@ Projekt zawiera zintegrowaną **Telegram Mini App** (Web App) z nowoczesnym inte
 
 ## 🛠 Stos technologiczny
 
-- **Backend**: Python 3.10+, [Aiogram 3](https://docs.aiogram.dev/en/latest/)
+- **Backend**: Python 3.11+, [Aiogram 3](https://docs.aiogram.dev/en/latest/)
 - **Baza danych**: SQLite (przy użyciu `aiosqlite`)
 - **Komponenty pobierania**: `yt-dlp`, `gallery-dl`, `spotdl`
 - **Przetwarzanie mediów**: `FFmpeg`, `mutagen`, `Pillow`
@@ -71,7 +71,7 @@ cd Media-Downloader-Bot
 ```
 
 ### 2. Konfiguracja środowiska
-Utwórz plik `.env` w katalogu głównym projektu i uzupełnij go następującymi danymi:
+Skopiuj `.env.example` do `.env` i uzupełnij — każda zmienna jest tam opisana. Minimalnie potrzebne są:
 ```env
 BOT_TOKEN=twój_token_bota
 LOCAL_API_SERVER_URL=http://127.0.0.1:8081
@@ -80,7 +80,7 @@ API_HASH=twój_api_hash
 ```
 
 ### 3. Instalacja zależności
-Upewnij się, że w systemie zainstalowany jest `ffmpeg`.
+Upewnij się, że w systemie zainstalowane są `ffmpeg` i [Deno](https://deno.com) 2.3+: `yt-dlp` potrzebuje środowiska JavaScript do wyzwań YouTube, bez niego YouTube zwraca tylko część formatów albo nic.
 ```bash
 python -m venv venv
 source venv/bin/activate  # Dla Windows: venv\Scripts\activate
@@ -110,6 +110,15 @@ Aby sprawdzić logi systemowe, użyj polecenia:
 ```bash
 sudo journalctl -u tg-media-bot -f
 ```
+
+Aby zastosować aktualizacje, uruchom `./auto_deploy.sh` ponownie (zrestartuje usługi). `UPDATE_BOT_API=1 ./auto_deploy.sh` dodatkowo przebuduje Telegram Bot API Server z najnowszych źródeł. Baza jest codziennie kopiowana do `backups/` (zostaje 14 najnowszych kopii) — kopiuj je także poza serwer.
+
+## 🔒 Bezpieczeństwo
+
+- Lokalny Bot API Server działa jako osobny użytkownik `tgbotapi` i nasłuchuje tylko na `127.0.0.1`. W trybie `--local` może odczytać dowolny lokalny plik dla dowolnego tokena, więc nigdy nie wystawiaj portu `8081` na zewnątrz.
+- Wewnętrzne API bota też nasłuchuje tylko na localhost; wystawiaj je wyłącznie przez HTTPS (ngrok lub reverse proxy).
+- Linki od użytkowników są sprawdzane pod kątem adresów prywatnych i wewnętrznych (łącznie z każdym przekierowaniem) przed pobraniem.
+- Trzymaj `.env`, `cookies.txt`, `database.db` i `backups/` w tajemnicy: skrypt wdrożenia ustawia im uprawnienia `600`.
 
 ## ⚠️ Informacje prawne (Disclaimer)
 
