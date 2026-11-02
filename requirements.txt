@@ -1,6 +1,6 @@
 aiogram==3.29.1
 # Схеми даних з Mini App (core/webapp_data.py). Версію обмежує aiogram.
-pydantic>=2
+pydantic>=2.14.2
 # yt-dlp breaks whenever YouTube changes its backend, so it is deliberately
 # left unpinned: core.yt_dlp_updater installs the latest release at deploy
 # time and weekly thereafter.  A pinned floor here would go stale faster than
